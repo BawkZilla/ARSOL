@@ -1,4 +1,3 @@
-// ==== Room.jsx (Next.js use client) ====
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
@@ -8,13 +7,14 @@ export default function Room() {
   const { id } = useParams();
   const localVideo = useRef();
   const remoteVideo = useRef();
+  const remoteAudio = useRef();
   const pc = useRef();
   const localStream = useRef();
   const [mode, setMode] = useState(null);
   const [joined, setJoined] = useState(false);
   const [muted, setMuted] = useState(false);
 
-  // 플로팅 위치 & 상태
+  // 드래그 관련
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [posX, setPosX] = useState(20);
   const [posY, setPosY] = useState(20);
@@ -45,27 +45,16 @@ export default function Room() {
     }
   };
 
-  const toggleFullScreen = () => {
-    setIsFullScreen(!isFullScreen);
-  };
+  const toggleFullScreen = () => setIsFullScreen(!isFullScreen);
 
   const startDrag = (e) => {
-    if (isFullScreen) return; // 전체화면 상태면 드래그 막기
+    if (isFullScreen) return;
     setDragging(true);
-    offset.current = {
-      x: e.clientX - posX,
-      y: e.clientY - posY
-    };
+    offset.current = { x: e.clientX - posX, y: e.clientY - posY };
     window.addEventListener("mousemove", onDrag);
     window.addEventListener("mouseup", stopDrag);
   };
-
-  const onDrag = (e) => {
-    if (!dragging) return;
-    setPosX(e.clientX - offset.current.x);
-    setPosY(e.clientY - offset.current.y);
-  };
-
+  const onDrag = (e) => dragging && (setPosX(e.clientX - offset.current.x), setPosY(e.clientY - offset.current.y));
   const stopDrag = () => {
     setDragging(false);
     window.removeEventListener("mousemove", onDrag);
@@ -80,7 +69,6 @@ export default function Room() {
       pc.current.close();
       pc.current = null;
     }
-
     socket.off("signal");
 
     pc.current = new RTCPeerConnection({
@@ -94,45 +82,50 @@ export default function Room() {
       ]
     });
 
-    const stream = newMode === "webcam"
-      ? await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      : await (async () => {
-          const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-          try {
-            const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            micStream.getAudioTracks().forEach(track => {
-              screenStream.addTrack(track);
-              console.log("🎤 마이크 track 추가:", track);
-            });
-          } catch (err) {
-            console.warn("🎤 마이크 권한 거부됨 (화면만 공유):", err);
-          }
-          return screenStream;
-        })();
+    let stream;
+    if (newMode === "webcam") {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    } else {
+      const screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      stream = new MediaStream(screen.getVideoTracks());
+      try {
+        const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mic.getAudioTracks().forEach(track => stream.addTrack(track));
+        console.log("🎤 마이크 트랙 추가됨:", mic.getAudioTracks());
+      } catch (err) {
+        console.warn("🎤 마이크 권한 거부됨:", err);
+      }
+    }
 
-    console.log("✅ Local stream tracks:", stream.getTracks());
+    console.log("✅ 최종 stream 트랙:", stream.getTracks());
     localStream.current = stream;
     localVideo.current.srcObject = stream;
 
     stream.getTracks().forEach(track => {
-      console.log("➕ PeerConnection에 트랙 추가:", track);
+      console.log("➕ PeerConnection에 트랙 추가:", track.kind, track);
       pc.current.addTrack(track, stream);
     });
 
     pc.current.onicecandidate = (e) => {
       if (e.candidate) {
-        console.log("📝 Sending ICE candidate:", e.candidate);
+        console.log("📝 ICE candidate:", e.candidate);
         socket.emit("signal", { roomId: id, data: e.candidate });
       }
     };
 
     pc.current.ontrack = (e) => {
-      console.log("✅ Remote ontrack:", e.track.kind, e.streams);
-      remoteVideo.current.srcObject = e.streams[0];
+      console.log("📥 ontrack event:", e.track.kind, e.streams);
+      // 안전하게 video/audio 따로 다 넣기
+      if (e.track.kind === "video") {
+        remoteVideo.current.srcObject = e.streams[0];
+      }
+      if (e.track.kind === "audio") {
+        remoteAudio.current.srcObject = e.streams[0];
+      }
     };
 
     socket.on("signal", async ({ from, data }) => {
-      console.log("📥 Signal from", from, ":", data);
+      console.log("📡 Signal from", from, ":", data);
       if (from === socket.id) return;
 
       if (data.type === "offer") {
@@ -158,14 +151,8 @@ export default function Room() {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh", background: "black" }}>
-      <video 
-        ref={localVideo} 
-        autoPlay 
-        muted 
-        style={{ width: "100%", height: "100%", objectFit: "cover" }} 
-      />
-
-      <div 
+      <video ref={localVideo} autoPlay muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      <div
         onClick={toggleFullScreen}
         onMouseDown={startDrag}
         style={{
@@ -178,14 +165,18 @@ export default function Room() {
           cursor: isFullScreen ? "pointer" : "grab",
           zIndex: 10,
           background: "black"
-        }}
-      >
-        <video 
-          ref={remoteVideo} 
-          autoPlay 
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
+        }}>
+        <video ref={remoteVideo} autoPlay style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <audio ref={remoteAudio} autoPlay />
       </div>
+
+      {joined && (
+        <div style={{ position: "absolute", top: "10px", left: "10px", zIndex: 20 }}>
+          <button onClick={() => { setMode("webcam"); startStream("webcam"); }}>웹캠 모드</button>
+          <button onClick={() => { setMode("screen"); startStream("screen"); }}>화면 공유 모드</button>
+          <button onClick={toggleMute}>{muted ? "마이크 켜기" : "마이크 끄기"}</button>
+        </div>
+      )}
 
       {!joined && (
         <div style={{
@@ -194,20 +185,6 @@ export default function Room() {
           color: "white", fontSize: "20px"
         }}>
           ❌ 아직 상대방이 없습니다. 상대방(전문가)을 기다리세요.
-        </div>
-      )}
-
-      {joined && (
-        <div style={{ position: "absolute", top: "10px", left: "10px", zIndex: 20 }}>
-          <button onClick={() => { setMode("webcam"); startStream("webcam"); }}>
-            ▶ 웹캠 모드
-          </button>
-          <button onClick={() => { setMode("screen"); startStream("screen"); }}>
-            🖥 화면 공유 모드
-          </button>
-          <button onClick={toggleMute}>
-            {muted ? "🔇 마이크 켜기" : "🎙 마이크 끄기"}
-          </button>
         </div>
       )}
     </div>
