@@ -9,16 +9,26 @@ export default function Rooms() {
   const router = useRouter();
 
   useEffect(() => {
-    fetch("http://localhost:4000/rooms")
-      .then(res => res.json())
-      .then(setRooms)
-      .catch(err => console.error("방 목록 불러오기 실패:", err));
+    socket.emit("get-rooms"); // 처음 접속 시 최신 데이터
 
     socket.on("rooms-updated", (updatedRooms) => {
+      console.log("rooms-updated:", updatedRooms);
       setRooms(updatedRooms);
     });
 
+    // 1초마다 강제 fetch
+    const interval = setInterval(() => {
+      fetch("http://localhost:4000/rooms")
+        .then(res => res.json())
+        .then((data) => {
+          console.log("polling /rooms:", data);
+          setRooms(data);
+        })
+        .catch((err) => console.error("polling error:", err));
+    }, 1000);
+
     return () => {
+      clearInterval(interval);
       socket.off("rooms-updated");
     };
   }, []);
@@ -28,9 +38,7 @@ export default function Rooms() {
     router.push(`/room/${roomId}`);
   };
 
-  const getStatus = (room) => {
-    return room.count >= 2 ? "상담 중" : "대기 중";
-  };
+  const getStatus = (room) => (room.count >= 2 ? "상담 중" : "대기 중");
 
   const filteredRooms = rooms.filter(room => {
     const status = getStatus(room);
@@ -47,9 +55,8 @@ export default function Rooms() {
       flexDirection: "column",
       alignItems: "center"
     }}>
-      <h2 style={{ fontSize: "2rem", marginBottom: "20px" }}>🚀 상담 게시판</h2>
-      
-      {/* 필터 버튼 */}
+      <h2 style={{ fontSize: "2rem", marginBottom: "20px" }}>상담 방 게시판 (실시간)</h2>
+
       <div style={{
         display: "flex",
         gap: "10px",
@@ -93,7 +100,7 @@ export default function Rooms() {
         onMouseOver={(e) => e.currentTarget.style.background = "#333"}
         onMouseOut={(e) => e.currentTarget.style.background = "#1e1e1e"}
       >
-        ➕ 방 만들기
+        방 만들기
       </button>
 
       <div style={{
@@ -104,7 +111,9 @@ export default function Rooms() {
         maxWidth: "900px"
       }}>
         {filteredRooms.length === 0 && (
-          <div style={{ textAlign: "center", color: "#aaa" }}>해당 조건의 방이 없습니다.</div>
+          <div style={{ textAlign: "center", color: "#aaa" }}>
+            해당 조건의 방이 없습니다.
+          </div>
         )}
 
         {filteredRooms.map(room => {
@@ -113,11 +122,7 @@ export default function Rooms() {
           return (
             <div
               key={room.id}
-              onClick={() => {
-                if (!isFull) {
-                  router.push(`/room/${room.id}`);
-                }
-              }}
+              onClick={() => { if (!isFull) router.push(`/room/${room.id}`); }}
               style={{
                 background: isFull ? "#2c2c2c" : "#1e1e1e",
                 borderRadius: "10px",
@@ -141,7 +146,7 @@ export default function Rooms() {
                 e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.4)";
               }}
             >
-              <div style={{ fontSize: "1.2rem" }}>🔗 방 ID: {room.id}</div>
+              <div style={{ fontSize: "1.2rem" }}>방 ID: {room.id}</div>
               <div style={{ fontSize: "0.9rem", color: "#bbb" }}>
                 현재 인원: {room.count} / 2
               </div>

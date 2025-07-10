@@ -1,10 +1,13 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { socket } from "../../../lib/socket";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 export default function Room() {
   const { id } = useParams();
+  const router = useRouter();
   const localVideo = useRef();
   const remoteVideo = useRef();
   const remoteAudio = useRef();
@@ -12,8 +15,8 @@ export default function Room() {
   const localStream = useRef();
   const [joined, setJoined] = useState(false);
   const [muted, setMuted] = useState(false);
-
   const [mode, setMode] = useState(null);
+
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [posX, setPosX] = useState(20);
   const [posY, setPosY] = useState(20);
@@ -24,12 +27,21 @@ export default function Room() {
     if (!id) return;
     socket.emit("join-room", id);
 
-    socket.on("room-users", (users) => {
+    socket.on("room-users", ({ users }) => {
       console.log("👥 Room users:", users);
-      if (users.length >= 2) setJoined(true);
+      setJoined(users.length >= 2);
     });
 
-    return () => socket.off("room-users");
+    socket.on("room-closed", () => {
+      toast.error("⚠️ 방장이 방을 나가 방이 종료되었습니다.");
+      setTimeout(() => router.push("/rooms"), 2000);
+    });
+
+    return () => {
+      socket.emit("leave-room", id);
+      socket.off("room-users");
+      socket.off("room-closed");
+    };
   }, [id]);
 
   const toggleMute = () => {
@@ -117,6 +129,7 @@ export default function Room() {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh", background: "#121212" }}>
+      <ToastContainer position="top-center" />
       <video ref={localVideo} autoPlay muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
 
       <div
