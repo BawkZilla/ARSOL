@@ -33,7 +33,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log(`💔 Disconnected: ${socket.id}`);
+    console.log(`Disconnected: ${socket.id}`);
     for (let roomId in rooms) {
       rooms[roomId] = rooms[roomId].filter(id => id !== socket.id);
       if (rooms[roomId].length === 0) delete rooms[roomId];
