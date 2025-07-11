@@ -9,160 +9,117 @@ export default function Rooms() {
   const router = useRouter();
 
   useEffect(() => {
-    socket.emit("get-rooms"); // 처음 접속 시 최신 데이터
-
+    socket.emit("get-rooms");
     socket.on("rooms-updated", (updatedRooms) => {
       console.log("rooms-updated:", updatedRooms);
       setRooms(updatedRooms);
     });
 
-    // 1초마다 강제 fetch
-    const interval = setInterval(() => {
-      fetch("http://localhost:4000/rooms")
-        .then(res => res.json())
-        .then((data) => {
-          console.log("polling /rooms:", data);
-          setRooms(data);
-        })
-        .catch((err) => console.error("polling error:", err));
-    }, 1000);
-
     return () => {
-      clearInterval(interval);
       socket.off("rooms-updated");
     };
   }, []);
 
-  const createRoom = () => {
-    const roomId = Math.random().toString(36).substring(2, 8);
-    router.push(`/room/${roomId}`);
-  };
-
   const getStatus = (room) => (room.count >= 2 ? "상담 중" : "대기 중");
 
-  const filteredRooms = rooms.filter(room => {
-    const status = getStatus(room);
-    return filter === "전체" || status === filter;
-  });
+  const tryJoinRoom = (room) => {
+    if (getStatus(room) === "상담 중") return;
+    const nickname = localStorage.getItem("nickname") || "익명";
+    const inputPw = prompt(`${room.roomName} 방 비밀번호를 입력하세요:`);
+    if (!inputPw) return;
+
+    console.log("emit join-room", { roomId: room.id, pw: inputPw });
+
+    socket.off("invalid-password");
+    socket.off("join-success");
+
+    socket.on("invalid-password", () => {
+      console.log("invalid-password received");
+      alert("비밀번호가 틀렸습니다.");
+    });
+
+    socket.on("join-success", ({ roomId }) => {
+      console.log("join-success received", roomId);
+      router.push(`/room/${roomId}`);
+    });
+
+    socket.emit("join-room", { roomId: room.id, password: inputPw, nickname });
+  };
 
   return (
     <div style={{
       minHeight: "100vh",
-      background: "#121212",
-      color: "#eee",
-      padding: "20px",
       display: "flex",
       flexDirection: "column",
-      alignItems: "center"
+      alignItems: "center",
+      justifyContent: "flex-start",
+      background: "#121212",
+      color: "#eee",
+      padding: "20px"
     }}>
       <h2 style={{ fontSize: "2rem", marginBottom: "20px" }}>상담 방 게시판 (실시간)</h2>
-
-      <div style={{
-        display: "flex",
-        gap: "10px",
-        marginBottom: "30px",
-        flexWrap: "wrap",
-        justifyContent: "center"
-      }}>
+      <div style={{ display: "flex", gap: "10px", marginBottom: "30px" }}>
         {["전체", "대기 중", "상담 중"].map(tag => (
-          <button
-            key={tag}
-            onClick={() => setFilter(tag)}
+          <button key={tag} onClick={() => setFilter(tag)}
             style={{
               padding: "8px 16px",
               background: filter === tag ? "#22c55e" : "#1e1e1e",
               color: "#eee",
               border: "none",
               borderRadius: "8px",
-              cursor: "pointer",
-              boxShadow: "0 2px 6px rgba(0,0,0,0.4)",
-              transition: "0.3s"
-            }}
-          >
+              cursor: "pointer"
+            }}>
             {tag}
           </button>
         ))}
       </div>
-
-      <button
-        onClick={createRoom}
+      <button onClick={() => router.push("/create")}
         style={{
           padding: "10px 20px",
-          marginBottom: "30px",
           background: "#1e1e1e",
           color: "#eee",
           border: "none",
           borderRadius: "8px",
-          cursor: "pointer",
-          boxShadow: "0 2px 6px rgba(0,0,0,0.4)",
-          transition: "0.3s"
-        }}
-        onMouseOver={(e) => e.currentTarget.style.background = "#333"}
-        onMouseOut={(e) => e.currentTarget.style.background = "#1e1e1e"}
-      >
+          marginBottom: "30px",
+          cursor: "pointer"
+        }}>
         방 만들기
       </button>
-
       <div style={{
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-        gap: "20px",
-        width: "100%",
-        maxWidth: "900px"
+        gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+        gap: "20px"
       }}>
-        {filteredRooms.length === 0 && (
-          <div style={{ textAlign: "center", color: "#aaa" }}>
-            해당 조건의 방이 없습니다.
-          </div>
-        )}
-
-        {filteredRooms.map(room => {
-          const status = getStatus(room);
-          const isFull = status === "상담 중";
-          return (
-            <div
-              key={room.id}
-              onClick={() => { if (!isFull) router.push(`/room/${room.id}`); }}
+        {rooms.filter(room => filter === "전체" || getStatus(room) === filter)
+          .map(room => (
+            <div key={room.id} onClick={() => tryJoinRoom(room)}
               style={{
-                background: isFull ? "#2c2c2c" : "#1e1e1e",
+                background: getStatus(room) === "상담 중" ? "#2c2c2c" : "#1e1e1e",
                 borderRadius: "10px",
                 padding: "20px",
-                color: isFull ? "#888" : "#eee",
-                display: "flex",
-                flexDirection: "column",
-                gap: "10px",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
-                transition: "transform 0.3s, box-shadow 0.3s",
-                cursor: isFull ? "not-allowed" : "pointer"
-              }}
-              onMouseOver={(e) => {
-                if (!isFull) {
-                  e.currentTarget.style.transform = "translateY(-5px)";
-                  e.currentTarget.style.boxShadow = "0 8px 20px rgba(0,0,0,0.6)";
-                }
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.4)";
-              }}
-            >
-              <div style={{ fontSize: "1.2rem" }}>방 ID: {room.id}</div>
-              <div style={{ fontSize: "0.9rem", color: "#bbb" }}>
+                cursor: getStatus(room) === "상담 중" ? "not-allowed" : "pointer",
+                color: "#eee"
+              }}>
+              <div style={{ fontSize: "1.2rem", marginBottom: "8px" }}>방 이름: {room.roomName}</div>
+              <div style={{ fontSize: "0.9rem", color: "#bbb", marginBottom: "6px" }}>
+                게시글: {room.postContent}
+              </div>
+              <div style={{ fontSize: "0.9rem", color: "#bbb", marginBottom: "6px" }}>
                 현재 인원: {room.count} / 2
               </div>
               <div style={{
-                marginTop: "auto",
-                alignSelf: "flex-start",
-                padding: "4px 8px",
-                background: status === "상담 중" ? "#ff4444" : "#22c55e",
+                marginTop: "10px",
+                display: "inline-block",
+                padding: "2px 6px",
+                background: getStatus(room) === "상담 중" ? "#ff4444" : "#22c55e",
                 borderRadius: "6px",
-                fontSize: "0.8rem"
-              }}>
-                {status}
-              </div>
+                fontSize: "0.8rem",
+                whiteSpace: "pre-line",
+                wordBreak: "keep-all",
+                textAlign: "center"
+              }}>{getStatus(room)}</div>
             </div>
-          );
-        })}
+          ))}
       </div>
     </div>
   );
