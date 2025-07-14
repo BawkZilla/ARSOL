@@ -156,6 +156,6 @@ setInterval(() => {
     }
 }, 1000);
 
-httpServer.listen(4000, () => {
+httpServer.listen(4000,'0.0.0.0', () => {
     console.log("Server running on http://localhost:4000");
 });
