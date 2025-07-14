@@ -25,6 +25,16 @@ export default function Room() {
     const [dragging, setDragging] = useState(false);
     const offset = useRef({ x: 0, y: 0 });
 
+    const [isMobile, setIsMobile] = useState(false);
+    const [cameraFacing, setCameraFacing] = useState("environment");
+
+    useEffect(() => {
+        const ua = navigator.userAgent;
+        if (/Android|iPhone|iPad|iPod/i.test(ua)) {
+            setIsMobile(true);
+        }
+    }, []);
+
     useEffect(() => {
         socket.on("connect", () => {
             console.log("My socket.id:", socket.id);
@@ -38,12 +48,11 @@ export default function Room() {
     }, [id, socketId]);
 
     useEffect(() => {
-      return () => {
-          socket.emit("leave-room", id);
-          router.push("/rooms");
-      };
+        return () => {
+            socket.emit("leave-room", id);
+            router.push("/rooms");
+        };
     }, [id]);
-
 
     useEffect(() => {
         if (!id) return;
@@ -61,7 +70,7 @@ export default function Room() {
         socket.on("call-permission-result", ({ allow }) => {
             console.log("call-permission-result:", allow);
             if (allow) {
-                startStream("webcam"); // 전문가도 허용 받으면 자동 start
+                startStream("webcam"); 
             } else {
                 toast.error("방장이 통화를 거부했습니다.");
                 setTimeout(() => router.push("/rooms"), 2000);
@@ -138,11 +147,14 @@ export default function Room() {
     };
 
     const startStream = async (newMode) => {
-        console.log("startStream", newMode);
+        console.log("startStream", newMode, "cameraFacing:", cameraFacing);
 
         let stream;
         if (newMode === "webcam") {
-            stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: isMobile ? { facingMode: { exact: cameraFacing } } : true,
+                audio: true
+            });
         } else {
             const screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
             stream = new MediaStream(screen.getVideoTracks());
@@ -178,7 +190,6 @@ export default function Room() {
 
             pc.current.ontrack = (e) => {
                 console.log("ontrack received", e.streams);
-                // 내 stream 절대 remoteVideo에 표시 안됨
                 if (localStream.current && e.streams[0].id === localStream.current.id) {
                     console.log("내 stream, 무시");
                     return;
@@ -188,7 +199,6 @@ export default function Room() {
             };
         }
 
-        // replaceTrack
         const senders = pc.current.getSenders();
         stream.getTracks().forEach(track => {
             const sender = senders.find(s => s.track && s.track.kind === track.kind);
@@ -242,6 +252,12 @@ export default function Room() {
                         <button onClick={() => startStream("webcam")} style={btnStyle}>웹캠</button>
                         <button onClick={() => startStream("screen")} style={btnStyle}>화면 공유</button>
                         <button onClick={toggleMute} style={btnStyle}>{muted ? "마이크 켜기" : "마이크 끄기"}</button>
+                        {isMobile && (
+                            <>
+                                <button onClick={() => setCameraFacing("user")} style={btnStyle}>전면 카메라</button>
+                                <button onClick={() => setCameraFacing("environment")} style={btnStyle}>후면 카메라</button>
+                            </>
+                        )}
                     </>
                 )}
             </div>
