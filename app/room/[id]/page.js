@@ -4,6 +4,8 @@ import { useParams, useRouter } from "next/navigation";
 import { socket } from "../../../lib/socket";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import dynamic from "next/dynamic";
+const ARScene = dynamic(() => import("../../components/ARScene"), { ssr: false });
 
 export default function Room() {
     const { id } = useParams();
@@ -13,11 +15,13 @@ export default function Room() {
     const remoteAudio = useRef();
     const pc = useRef();
     const localStream = useRef();
+    
 
     const [socketId, setSocketId] = useState(null);
     const [joined, setJoined] = useState(false);
     const [muted, setMuted] = useState(false);
     const [pendingCall, setPendingCall] = useState(null);
+    const [showAR, setShowAR] = useState(false);// Added by 강유승
 
     const [isFullScreen, setIsFullScreen] = useState(false);
     const [posX, setPosX] = useState(20);
@@ -53,6 +57,8 @@ export default function Room() {
             router.push("/rooms");
         };
     }, [id]);
+   
+    
 
     useEffect(() => {
         if (!id) return;
@@ -63,14 +69,15 @@ export default function Room() {
         });
 
         socket.on("ask-call-permission", ({ expertNickname }) => {
-            console.log("ask-call-permission:", expertNickname);
-            setPendingCall(expertNickname);
+           console.log("ask-call-permission:", expertNickname);
+           setPendingCall(expertNickname);
         });
 
         socket.on("call-permission-result", ({ allow }) => {
             console.log("call-permission-result:", allow);
             if (allow) {
                 startStream("webcam"); 
+                setShowAR(true);
             } else {
                 toast.error("방장이 통화를 거부했습니다.");
                 setTimeout(() => router.push("/rooms"), 2000);
@@ -217,6 +224,7 @@ export default function Room() {
     return (
         <div style={{ position: "relative", width: "100%", height: "100vh", background: "#121212" }}>
             <ToastContainer position="top-center" />
+            {showAR && <ARScene socket={socket} roomId={id} />}
             <video ref={remoteVideo} autoPlay style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             <audio ref={remoteAudio} autoPlay />
 
@@ -273,7 +281,8 @@ export default function Room() {
                         {pendingCall} 님과 통화를 시작하시겠습니까?
                     </div>
                     <button onClick={() => {
-                        startStream("webcam");
+                        startStream("camera"); 
+                        setShowAR(true);
                         socket.emit("allow-call", { roomId: id, allow: true });
                         setPendingCall(null);
                     }} style={btnStyle}>허용</button>

@@ -92,6 +92,11 @@ io.on("connection", (socket) => {
         }
     });
 
+    socket.on("xr-sync", ({ roomId, matrix }) => { //Added by 강유승
+    // 보낸 사람을 제외한 같은 방 모든 유저에게 전달
+        socket.to(roomId).emit("xr-update", { matrix });
+    });
+
     socket.on("signal", ({ roomId, data }) => {
         console.log(`Relaying signal in room ${roomId}`);
         socket.to(roomId).emit("signal", { from: socket.id, data });
