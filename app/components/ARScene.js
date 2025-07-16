@@ -1,35 +1,24 @@
 // app/components/ARScene.js
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-/**
- * WebXR + Three.js 씬.
- * - testobj.glb 모델을 로드하여 (0,0,-0.5) 위치에 배치
- * - 200 ms 간격으로 모델의 transform matrix를 소켓으로 송신
- * - 다른 참가자에게서 matrix를 수신하면 동일하게 적용
- *
- * props:
- *   socket  : socket.io-client 인스턴스
- *   roomId  : 현재 방 ID
- */
 export default function ARScene({ socket, roomId }) {
-  const wrapRef     = useRef(null);          // 렌더러 DOM을 넣을 div
+  const wrapRef     = useRef(null);
   const rendererRef = useRef(null);
-  const testObjRef  = useRef(null);          // glTF 모델의 루트 노드
-  const lastSyncRef = useRef(0);             // 마지막 송신 시각(ms)
+  const testObjRef  = useRef(null);
+  const lastSyncRef = useRef(0);
 
+  const [arReady,    setArReady]    = useState(false); // XR 지원 여부
+  const [arStarted,  setArStarted]  = useState(false); // 세션 시작 여부
+  const [errMsg,     setErrMsg]     = useState("");
+
+  /* ─────────── Three.js 기본 세팅 ─────────── */
   useEffect(() => {
-    /* ───────────────── Three.js 기본 구성 ───────────────── */
     const scene  = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(
-      70,
-      window.innerWidth / window.innerHeight,
-      0.01,
-      20,
-    );
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.xr.enabled = true;
@@ -38,58 +27,32 @@ export default function ARScene({ socket, roomId }) {
     wrapRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    /* 조명 */
     scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
 
-    /* ───────────── testobj.glb 모델 불러오기 ───────────── */
-    const loader = new GLTFLoader();
-    loader.load(
+    // 모델 로드
+    new GLTFLoader().load(
       "/models/testobj.glb",
       (gltf) => {
         testObjRef.current = gltf.scene;
-        testObjRef.current.position.set(0, 0, -0.5); // 카메라 앞 50 cm
+        testObjRef.current.position.set(0, 0, -0.5);
         scene.add(testObjRef.current);
       },
       undefined,
-      (err) => console.error("testobj.glb 로드 실패:", err),
+      (e) => console.error("모델 로드 실패:", e),
     );
 
-    /* ───────────────── XR 세션 요청 ───────────────── */
-    if (navigator.xr) {
-      navigator.xr
-        .requestSession("immersive-ar", {
-          requiredFeatures: ["hit-test"],
-          domOverlay: { root: document.body },
-        })
-        .then((session) => {
-          renderer.xr.setReferenceSpaceType("local");
-          renderer.xr.setSession(session);
-        })
-        .catch((err) => console.warn("XR 세션 실패:", err));
-    } else {
-      console.warn("WebXR not supported");
-    }
-
-    /* ───────────────── 애니메이션 루프 ───────────────── */
-    const animate = (time) => {
-      /* 200 ms 마다 본인 transform 전송 */
-      if (
-        testObjRef.current &&
-        time - lastSyncRef.current > 200
-      ) {
-        lastSyncRef.current = time;
-        socket.emit("xr-sync", {
-          roomId,
-          matrix: testObjRef.current.matrix.toArray(),
-        });
+    // 애니메이션
+    const animate = (t) => {
+      if (testObjRef.current && t - lastSyncRef.current > 200) {
+        lastSyncRef.current = t;
+        socket.emit("xr-sync", { roomId, matrix: testObjRef.current.matrix.toArray() });
       }
-
       renderer.render(scene, camera);
     };
     renderer.setAnimationLoop(animate);
 
-    /* ───────────────── 소켓 이벤트 ───────────────── */
-    const onRemoteUpdate = ({ matrix }) => {
+    // 소켓 수신
+    const onUpdate = ({ matrix }) => {
       if (!testObjRef.current) return;
       testObjRef.current.matrix.fromArray(matrix);
       testObjRef.current.matrix.decompose(
@@ -99,28 +62,86 @@ export default function ARScene({ socket, roomId }) {
       );
       testObjRef.current.matrixAutoUpdate = false;
     };
-    socket.on("xr-update", onRemoteUpdate);
+    socket.on("xr-update", onUpdate);
 
-    /* ───────────────── 클린업 ───────────────── */
+    // XR 지원 여부 확인
+    if (navigator.xr && navigator.xr.isSessionSupported) {
+      navigator.xr.isSessionSupported("immersive-ar").then(setArReady);
+    }
+
     return () => {
-      socket.off("xr-update", onRemoteUpdate);
+      socket.off("xr-update", onUpdate);
       renderer.setAnimationLoop(null);
       renderer.dispose();
       wrapRef.current?.removeChild(renderer.domElement);
     };
   }, [socket, roomId]);
 
-  /* 렌더러가 삽입될 컨테이너 */
+  /* ─────────── ‘AR 시작’ 버튼 클릭 핸들러 ─────────── */
+  const handleStartAR = async () => {
+    if (!navigator.xr) {
+      setErrMsg("이 기기는 WebXR을 지원하지 않습니다.");
+      return;
+    }
+    try {
+      const session = await navigator.xr.requestSession("immersive-ar", {
+        requiredFeatures : ["hit-test"],
+        optionalFeatures : ["dom-overlay"],
+        domOverlay       : { root: document.body },
+      });
+      rendererRef.current.xr.setReferenceSpaceType("local");
+      rendererRef.current.xr.setSession(session);
+      setArStarted(true);
+    } catch (e) {
+      console.error(e);
+      setErrMsg(e.message);
+    }
+  };
+
+  /* ─────────── UI 렌더링 ─────────── */
   return (
-    <div
-      ref={wrapRef}
-      style={{
-        position: "absolute",
-        inset: 0,
-        overflow: "hidden",
-        pointerEvents: "none", // XR 화면 터치가 밑에 클릭 막지 않도록
-        zIndex: 5,
-      }}
-    />
+    <>
+      <div
+        ref={wrapRef}
+        style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 5 }}
+      />
+
+      {/* AR 진입 전 오버레이 */}
+      {!arStarted && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.4)",
+            zIndex: 10,
+          }}
+        >
+          {errMsg ? (
+            <p style={{ color: "white", padding: 20 }}>{errMsg}</p>
+          ) : (
+            <>
+              <button
+                onClick={handleStartAR}
+                style={{
+                  padding: "12px 24px",
+                  fontSize: 18,
+                  borderRadius: 6,
+                  border: "none",
+                  cursor: "pointer",
+                }}
+                disabled={!arReady}
+              >
+                AR 시작
+              </button>
+              {!arReady && <p style={{ color: "white", marginTop: 12 }}>이 브라우저는 AR을 지원하지 않습니다.</p>}
+            </>
+          )}
+        </div>
+      )}
+    </>
   );
 }
