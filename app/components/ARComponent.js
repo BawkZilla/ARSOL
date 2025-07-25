@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 
-const ARComponent = () => {
+const ARComponent = ({ onStreamReady }) => {
   const sceneRef = useRef(null);
 
   useEffect(() => {
@@ -11,6 +11,19 @@ const ARComponent = () => {
       console.warn('ARComponent: sceneRef.current is null.');
       return;
     }
+
+    const setupStream = () => {
+      if (onStreamReady) {
+        const canvas = sceneEl.canvas;
+        if (canvas) {
+          const stream = canvas.captureStream(30); // 30 fps
+          onStreamReady(stream);
+          console.log("ARComponent: Stream captured and sent.");
+        } else {
+          console.error("ARComponent: Could not find canvas to capture stream.");
+        }
+      }
+    };
 
     const handleClick = (event) => {
       const touchPoint = event.detail.intersection.point;
@@ -25,34 +38,29 @@ const ARComponent = () => {
     };
 
     const handleTargetFound = (event) => {
-      console.log("Target Found:", event.target);
       const targetPlane = event.target.querySelector('.target-plane');
       if (targetPlane) {
-        // Briefly show a yellow highlight on the plane
         targetPlane.setAttribute('opacity', '0.5');
         targetPlane.setAttribute('color', 'yellow');
         setTimeout(() => {
           targetPlane.setAttribute('opacity', '0');
-        }, 1000); // Highlight for 1 second
+        }, 1000);
       }
     };
 
     const handleTargetLost = (event) => {
-      console.log("Target Lost:", event.target);
-      // You could add logic here if needed when a target is lost
+      // Logic for when a target is lost
     };
 
     const setupEventListeners = () => {
       const targetEntities = sceneEl.querySelectorAll('[mindar-image-target]');
       targetEntities.forEach(target => {
         const plane = target.querySelector('.target-plane');
-        if (plane) {
-            plane.addEventListener('click', handleClick);
-        }
+        if (plane) plane.addEventListener('click', handleClick);
         target.addEventListener('targetFound', handleTargetFound);
         target.addEventListener('targetLost', handleTargetLost);
       });
-      console.log(`ARComponent: Added event listeners to ${targetEntities.length} targets.`);
+      setupStream(); // Setup stream after event listeners are ready
     };
     
     if (sceneEl.hasLoaded) {
@@ -65,16 +73,13 @@ const ARComponent = () => {
       const targetEntities = sceneEl.querySelectorAll('[mindar-image-target]');
       targetEntities.forEach(target => {
         const plane = target.querySelector('.target-plane');
-        if (plane) {
-            plane.removeEventListener('click', handleClick);
-        }
+        if (plane) plane.removeEventListener('click', handleClick);
         target.removeEventListener('targetFound', handleTargetFound);
         target.removeEventListener('targetLost', handleTargetLost);
       });
       sceneEl.removeEventListener('loaded', setupEventListeners);
-      console.log('ARComponent: Removed all event listeners.');
     };
-  }, []);
+  }, [onStreamReady]);
 
   return (
     <div style={{ width: '100%', height: '100%' }}>
@@ -87,6 +92,7 @@ const ARComponent = () => {
         device-orientation-permission-ui="enabled: false"
         cursor="rayOrigin: mouse; fuse: false;"
         raycaster="objects: .target-plane"
+        embedded
       >
         <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
