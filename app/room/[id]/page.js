@@ -4,7 +4,12 @@ import { useParams, useRouter } from "next/navigation";
 import { socket } from "../../../lib/socket";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import ARComponent from "../../components/ARComponent"; // AR 컴포넌트 import
+import dynamic from "next/dynamic";
+
+const ARComponent = dynamic(
+  () => import("../../components/ARComponent"),
+  { ssr: false }
+);
 
 export default function Room() {
   const { id } = useParams();
@@ -201,16 +206,20 @@ export default function Room() {
 
   const toggleARMode = () => {
     if (!arMode) {
-      // AR 모드 켜기: WebRTC 연결 완전 종료
+      // AR 모드 켜기: WebRTC 관련 리소스를 먼저 확실히 정리합니다.
       stopLocalStream();
       if (pc.current) {
         pc.current.close();
         pc.current = null;
       }
+      // 상태를 바로 변경하지 않고, 브라우저가 카메라 리소스를 해제할 시간을 줍니다.
+      setTimeout(() => {
+        setArMode(true);
+      }, 200); // 200ms 지연
     } else {
-      // AR 모드 끄기: 사용자가 다시 웹캠 버튼을 눌러 연결을 재시작해야 함
+      // AR 모드 끄기: 바로 상태를 변경합니다.
+      setArMode(false);
     }
-    setArMode(!arMode);
   };
 
   // ... (기존 함수들) ...

@@ -7,51 +7,103 @@ const ARComponent = () => {
 
   useEffect(() => {
     const sceneEl = sceneRef.current;
-    if (sceneEl) {
-      const arSystem = sceneEl.systems["mindar-image-system"];
-      const startAR = () => {
-        arSystem.start(); // start AR system
-      };
-      sceneEl.addEventListener("renderstart", startAR);
-
-      return () => {
-        sceneEl.removeEventListener("renderstart", startAR);
-        if (arSystem && arSystem.isStarted) {
-          arSystem.stop();
-        }
-      };
+    if (!sceneEl) {
+      console.warn('ARComponent: sceneRef.current is null.');
+      return;
     }
+
+    const handleClick = (event) => {
+      const touchPoint = event.detail.intersection.point;
+      const parentEntity = event.target.parentElement;
+      const localPosition = parentEntity.object3D.worldToLocal(touchPoint.clone());
+      
+      const annotationSphere = document.createElement('a-sphere');
+      annotationSphere.setAttribute('radius', '0.05');
+      annotationSphere.setAttribute('color', '#4CC3D9');
+      annotationSphere.setAttribute('position', localPosition);
+      parentEntity.appendChild(annotationSphere);
+    };
+
+    const handleTargetFound = (event) => {
+      console.log("Target Found:", event.target);
+      const targetPlane = event.target.querySelector('.target-plane');
+      if (targetPlane) {
+        // Briefly show a yellow highlight on the plane
+        targetPlane.setAttribute('opacity', '0.5');
+        targetPlane.setAttribute('color', 'yellow');
+        setTimeout(() => {
+          targetPlane.setAttribute('opacity', '0');
+        }, 1000); // Highlight for 1 second
+      }
+    };
+
+    const handleTargetLost = (event) => {
+      console.log("Target Lost:", event.target);
+      // You could add logic here if needed when a target is lost
+    };
+
+    const setupEventListeners = () => {
+      const targetEntities = sceneEl.querySelectorAll('[mindar-image-target]');
+      targetEntities.forEach(target => {
+        const plane = target.querySelector('.target-plane');
+        if (plane) {
+            plane.addEventListener('click', handleClick);
+        }
+        target.addEventListener('targetFound', handleTargetFound);
+        target.addEventListener('targetLost', handleTargetLost);
+      });
+      console.log(`ARComponent: Added event listeners to ${targetEntities.length} targets.`);
+    };
+    
+    if (sceneEl.hasLoaded) {
+      setupEventListeners();
+    } else {
+      sceneEl.addEventListener('loaded', setupEventListeners);
+    }
+
+    return () => {
+      const targetEntities = sceneEl.querySelectorAll('[mindar-image-target]');
+      targetEntities.forEach(target => {
+        const plane = target.querySelector('.target-plane');
+        if (plane) {
+            plane.removeEventListener('click', handleClick);
+        }
+        target.removeEventListener('targetFound', handleTargetFound);
+        target.removeEventListener('targetLost', handleTargetLost);
+      });
+      sceneEl.removeEventListener('loaded', setupEventListeners);
+      console.log('ARComponent: Removed all event listeners.');
+    };
   }, []);
 
   return (
-    <a-scene
-      ref={sceneRef}
-      mindar-image="imageTargetSrc: /mouse1.mind, /mouse2.mind, /mouse3.mind, /mouse4.mind; autoStart: false; uiScanning: #scanning; uiLoading: #loading;"
-      color-space="sRGB"
-      renderer="colorManagement: true"
-      vr-mode-ui="enabled: false"
-      device-orientation-permission-ui="enabled: false"
-    >
-      <a-assets>
-        <div id="loading">Loading...</div>
-        <div id="scanning">Scanning...</div>
-      </a-assets>
+    <div style={{ width: '100%', height: '100%' }}>
+      <a-scene
+        ref={sceneRef}
+        mindar-image="imageTargetSrc: /targets.mind; autoStart: true;"
+        color-space="sRGB"
+        renderer="colorManagement: true, physicallyCorrectLights"
+        vr-mode-ui="enabled: false"
+        device-orientation-permission-ui="enabled: false"
+        cursor="rayOrigin: mouse; fuse: false;"
+        raycaster="objects: .target-plane"
+      >
+        <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-
-      <a-entity mindar-image-target="targetIndex: 0">
-        <a-text value="Angle 1 Detected" color="red" position="0 0.1 0" align="center"></a-text>
-      </a-entity>
-      <a-entity mindar-image-target="targetIndex: 1">
-        <a-text value="Angle 2 Detected" color="orange" position="0 0.1 0" align="center"></a-text>
-      </a-entity>
-      <a-entity mindar-image-target="targetIndex: 2">
-        <a-text value="Angle 3 Detected" color="green" position="0 0.1 0" align="center"></a-text>
-      </a-entity>
-      <a-entity mindar-image-target="targetIndex: 3">
-        <a-text value="Angle 4 Detected" color="blue" position="0 0.1 0" align="center"></a-text>
-      </a-entity>
-    </a-scene>
+        <a-entity mindar-image-target="targetIndex: 0">
+          <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+        </a-entity>
+        <a-entity mindar-image-target="targetIndex: 1">
+          <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+        </a-entity>
+        <a-entity mindar-image-target="targetIndex: 2">
+          <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+        </a-entity>
+        <a-entity mindar-image-target="targetIndex: 3">
+          <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+        </a-entity>
+      </a-scene>
+    </div>
   );
 };
 
