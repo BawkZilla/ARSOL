@@ -5,10 +5,9 @@ import { socket } from "../../../lib/socket";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-export default function Room() {
+export default function Page() {
     const { id } = useParams();
     const router = useRouter();
-    const localVideo = useRef();
     const remoteVideo = useRef();
     const remoteAudio = useRef();
     const pc = useRef();
@@ -16,8 +15,16 @@ export default function Room() {
     const pendingCandidates = useRef([]);
     const [socketId, setSocketId] = useState(null);
     const [isHost, setIsHost] = useState(false);
-    const [joined, setJoined] = useState(false);
+    const isHostRef = useRef(false);
     const [muted, setMuted] = useState(false);
+
+    useEffect(() => {
+        socket.on("start-call", () => {
+            console.log("📞 start-call 수신 → startHostCall()");
+            startHostCall();
+        });
+        return () => socket.off("start-call");
+    }, []);
 
     useEffect(() => {
         socket.on("connect", () => setSocketId(socket.id));
@@ -33,15 +40,8 @@ export default function Room() {
     useEffect(() => {
         socket.on("join-success", ({ isHost }) => {
             setIsHost(isHost);
+            isHostRef.current = isHost;
             console.log("🎉 join-success received, isHost:", isHost);
-        });
-
-        socket.on("room-users", ({ users }) => {
-            console.log("👥 room-users:", users);
-            if (users.length >= 2) {
-                setJoined(true);
-                if (isHost) startHostCall(); // 자동 시작
-            }
         });
 
         socket.on("signal", async ({ data }) => {
@@ -51,13 +51,10 @@ export default function Room() {
                 await handleOffer(data);
             } else if (data.type === "answer") {
                 await pc.current.setRemoteDescription(new RTCSessionDescription(data));
-                console.log("✅ remote description set (answer)");
             } else if (data.candidate) {
                 if (pc.current?.remoteDescription) {
                     await pc.current.addIceCandidate(new RTCIceCandidate(data));
-                    console.log("✅ ICE candidate added");
                 } else {
-                    console.log("🕗 ICE candidate pending");
                     pendingCandidates.current.push(data);
                 }
             }
@@ -71,55 +68,78 @@ export default function Room() {
         return () => {
             socket.emit("leave-room", id);
             socket.off("join-success");
-            socket.off("room-users");
             socket.off("signal");
             socket.off("room-closed");
         };
-    }, [id, socketId, isHost]);
+    }, [id, socketId]);
 
     const initPeer = () => {
         if (pc.current) return;
-        console.log("🧊 create new RTCPeerConnection");
+        console.log("🧊 initPeer 실행");
         pc.current = new RTCPeerConnection({
             iceServers: [
                 { urls: "stun:stun.l.google.com:19302" },
                 {
-                    urls: "turn:openrelay.metered.ca:80",
-                    username: "openrelayproject",
-                    credential: "openrelayproject"
+                    urls: "turn:relay1.expressturn.com:3478",
+                    username: "efGHj2T1zXv7YR01aY2M6g==",
+                    credential: "FGY2qbd9rHG+fLOq6yNB4zKq6ak="
                 }
             ]
         });
 
         pc.current.onicecandidate = (e) => {
             if (e.candidate) {
-                console.log("📡 sending ICE candidate");
                 socket.emit("signal", { roomId: id, data: e.candidate });
             }
         };
 
         pc.current.ontrack = (e) => {
+            console.log("📺 ontrack fired");
+            if (isHostRef.current) {
+                console.log("🙅 방장은 수신 무시");
+                return;
+            }
+            console.log("✅ 참가자: 방장 화면 수신");
             remoteVideo.current.srcObject = e.streams[0];
             remoteAudio.current.srcObject = e.streams[0];
         };
+
+        pc.current.onconnectionstatechange = () => {
+            console.log("🔗 WebRTC 연결 상태:", pc.current.connectionState);
+        };
+    };
+
+    const getCameraStream = async () => {
+        try {
+            return await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: "environment" } },
+                audio: true
+            });
+        } catch (err) {
+            return await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: true
+            });
+        }
     };
 
     const startHostCall = async () => {
         console.log("🎥 startHostCall 시작");
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            const stream = await getCameraStream();
             localStream.current = stream;
-            localVideo.current.srcObject = stream;
+
+            // 방장도 본인 화면 보기
+            remoteVideo.current.srcObject = stream;
+            remoteAudio.current.srcObject = stream;
 
             initPeer();
             stream.getTracks().forEach((track) => pc.current.addTrack(track, stream));
 
             const offer = await pc.current.createOffer();
             await pc.current.setLocalDescription(offer);
-            console.log("📤 offer 전송 완료");
             socket.emit("signal", { roomId: id, data: offer });
         } catch (err) {
-            console.error("🚨 host getUserMedia failed:", err);
             toast.error("카메라/마이크 권한을 허용해주세요.");
         }
     };
@@ -128,12 +148,9 @@ export default function Room() {
         try {
             initPeer();
             await pc.current.setRemoteDescription(new RTCSessionDescription(offer));
-            console.log("✅ remote description set (offer)");
 
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            const stream = await getCameraStream();
             localStream.current = stream;
-            localVideo.current.srcObject = stream;
-
             stream.getTracks().forEach((track) => pc.current.addTrack(track, stream));
 
             const answer = await pc.current.createAnswer();
@@ -142,11 +159,9 @@ export default function Room() {
 
             for (const c of pendingCandidates.current) {
                 await pc.current.addIceCandidate(new RTCIceCandidate(c));
-                console.log("✅ 추가로 ICE candidate 적용");
             }
             pendingCandidates.current = [];
         } catch (err) {
-            console.error("🚨 peer getUserMedia failed:", err);
             toast.error("카메라/마이크 권한을 허용해주세요.");
         }
     };
@@ -162,24 +177,8 @@ export default function Room() {
     return (
         <div style={{ width: "100%", height: "100vh", background: "black", position: "relative" }}>
             <ToastContainer position="top-center" />
-            <video ref={remoteVideo} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <video ref={remoteVideo} autoPlay playsInline muted={isHost} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             <audio ref={remoteAudio} autoPlay />
-
-            <video
-                ref={localVideo}
-                autoPlay
-                muted
-                style={{
-                    position: "absolute",
-                    bottom: 20,
-                    right: 20,
-                    width: "clamp(120px, 20vw, 200px)",
-                    height: "auto",
-                    border: "2px solid #eee",
-                    zIndex: 10,
-                }}
-            />
-
             <div style={{ position: "absolute", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 20 }}>
                 <button onClick={toggleMute} style={btnStyle}>
                     {muted ? "마이크 켜기" : "마이크 끄기"}

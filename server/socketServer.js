@@ -1,4 +1,3 @@
-// server/socketServer.js
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
@@ -64,7 +63,9 @@ io.on("connection", (socket) => {
         socket.emit("join-success", { roomId, isHost: socket.id === room.hostId });
         broadcastRooms();
 
-        if (room.users.length === 2) {
+        // ✅ 중복 없는 유저 수 기준으로 판단
+        const uniqueUserIds = [...new Set(room.users.map(u => u.id))];
+        if (uniqueUserIds.length === 2) {
             const guest = room.users.find(u => u.id !== room.hostId);
             if (guest) {
                 console.log(`📞 Triggering start-call to host ${room.hostId} with guest ${guest.nickname}`);
