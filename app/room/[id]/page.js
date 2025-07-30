@@ -1,249 +1,201 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { socket } from "../../../lib/socket";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 export default function Room() {
-  const { id } = useParams();
-  const router = useRouter();
-  const localVideo = useRef();
-  const remoteVideo = useRef();
-  const remoteAudio = useRef();
-  const pc = useRef();
-  const localStream = useRef();
+    const { id } = useParams();
+    const router = useRouter();
+    const localVideo = useRef();
+    const remoteVideo = useRef();
+    const remoteAudio = useRef();
+    const pc = useRef();
+    const localStream = useRef();
+    const pendingCandidates = useRef([]);
+    const [socketId, setSocketId] = useState(null);
+    const [isHost, setIsHost] = useState(false);
+    const [joined, setJoined] = useState(false);
+    const [muted, setMuted] = useState(false);
 
-  const [socketId, setSocketId] = useState(null);
-  const [joined, setJoined] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const [pendingCall, setPendingCall] = useState(null);
+    useEffect(() => {
+        socket.on("connect", () => setSocketId(socket.id));
+        return () => socket.off("connect");
+    }, []);
 
-  const [isFullScreen, setIsFullScreen] = useState(false);
-  const [posX, setPosX] = useState(20);
-  const [posY, setPosY] = useState(20);
-  const [dragging, setDragging] = useState(false);
-  const offset = useRef({ x: 0, y: 0 });
-
-  const [isMobile, setIsMobile] = useState(false);
-  const [cameraFacing, setCameraFacing] = useState("environment");
-
-  useEffect(() => {
-    if (typeof navigator !== "undefined") {
-      if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-        setIsMobile(true);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    socket.on("connect", () => setSocketId(socket.id));
-    return () => socket.off("connect");
-  }, []);
-
-  useEffect(() => {
-    if (!id || !socketId) return;
-    socket.emit("join-room", { roomId: id, password: "", nickname: "익명" });
-  }, [id, socketId]);
-
-  useEffect(() => {
-    socket.on("room-users", ({ users }) => setJoined(users.length >= 2));
-    socket.on("ask-call-permission", ({ expertNickname }) => setPendingCall(expertNickname));
-    socket.on("call-permission-result", ({ allow }) => {
-      if (!allow) {
-        toast.error("방장이 통화를 거부했습니다.");
-        setTimeout(() => router.push("/rooms"), 2000);
-      }
-    });
-    socket.on("force-leave", () => {
-      toast.error("방에서 내보내졌습니다.");
-      setTimeout(() => router.push("/rooms"), 2000);
-    });
-    socket.on("room-closed", () => {
-      toast.error("방장이 방을 닫았습니다.");
-      setTimeout(() => router.push("/rooms"), 2000);
-    });
-    socket.on("signal", async ({ data }) => {
-      if (data.type === "offer") await handlePeerOffer(data);
-      else if (data.type === "answer") await pc.current.setRemoteDescription(new RTCSessionDescription(data));
-      else if (data.candidate) await pc.current.addIceCandidate(new RTCIceCandidate(data));
-    });
-
-    return () => {
-      socket.emit("leave-room", id);
-      socket.off("room-users");
-      socket.off("ask-call-permission");
-      socket.off("call-permission-result");
-      socket.off("force-leave");
-      socket.off("room-closed");
-      socket.off("signal");
-    };
-  }, [id, socketId]);
-
-  const initPeerConnection = () => {
-    if (pc.current) return;
-    pc.current = new RTCPeerConnection({
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        {
-          urls: "turn:openrelay.metered.ca:80",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-      ],
-    });
-    pc.current.onicecandidate = (e) => {
-      if (e.candidate) socket.emit("signal", { roomId: id, data: e.candidate });
-    };
-    pc.current.ontrack = (e) => {
-      remoteVideo.current.srcObject = e.streams[0];
-      remoteAudio.current.srcObject = e.streams[0];
-    };
-  };
-
-  const startHostCall = async (mode = "webcam") => {
-    try {
-      const constraints = mode === "webcam"
-        ? isMobile ? { facingMode: cameraFacing } : true
-        : undefined;
-
-      const stream = mode === "screen"
-        ? await navigator.mediaDevices.getDisplayMedia({ video: true })
-        : await navigator.mediaDevices.getUserMedia({ video: constraints, audio: true });
-
-      if (mode === "screen") {
-        try {
-          const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
-          mic.getAudioTracks().forEach(track => stream.addTrack(track));
-        } catch (err) {
-          console.warn("마이크 권한 거부됨:", err);
+    useEffect(() => {
+        if (socketId && id) {
+            socket.emit("join-room", { roomId: id, password: "", nickname: "익명" });
         }
-      }
+    }, [socketId, id]);
 
-      localStream.current = stream;
-      localVideo.current.srcObject = stream;
+    useEffect(() => {
+        socket.on("join-success", ({ isHost }) => {
+            setIsHost(isHost);
+            console.log("🎉 join-success received, isHost:", isHost);
+        });
 
-      initPeerConnection();
-      stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
+        socket.on("room-users", ({ users }) => {
+            console.log("👥 room-users:", users);
+            if (users.length >= 2) {
+                setJoined(true);
+                if (isHost) startHostCall(); // 자동 시작
+            }
+        });
 
-      const offer = await pc.current.createOffer();
-      await pc.current.setLocalDescription(offer);
-      socket.emit("signal", { roomId: id, data: offer });
+        socket.on("signal", async ({ data }) => {
+            console.log("📡 signal 수신:", data);
 
-    } catch (err) {
-      console.error("🚨 host getUserMedia failed:", err);
-      toast.error("카메라/마이크 권한을 허용해주세요.");
-    }
-  };
+            if (data.type === "offer") {
+                await handleOffer(data);
+            } else if (data.type === "answer") {
+                await pc.current.setRemoteDescription(new RTCSessionDescription(data));
+                console.log("✅ remote description set (answer)");
+            } else if (data.candidate) {
+                if (pc.current?.remoteDescription) {
+                    await pc.current.addIceCandidate(new RTCIceCandidate(data));
+                    console.log("✅ ICE candidate added");
+                } else {
+                    console.log("🕗 ICE candidate pending");
+                    pendingCandidates.current.push(data);
+                }
+            }
+        });
 
-  const handlePeerOffer = async (offer) => {
-    try {
-      initPeerConnection();
-      await pc.current.setRemoteDescription(new RTCSessionDescription(offer));
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: isMobile ? { facingMode: cameraFacing } : true,
-        audio: true
-      });
-      localStream.current = stream;
-      localVideo.current.srcObject = stream;
-      stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
+        socket.on("room-closed", () => {
+            toast.error("방장이 방을 닫았습니다.");
+            setTimeout(() => router.push("/rooms"), 2000);
+        });
 
-      const answer = await pc.current.createAnswer();
-      await pc.current.setLocalDescription(answer);
-      socket.emit("signal", { roomId: id, data: answer });
+        return () => {
+            socket.emit("leave-room", id);
+            socket.off("join-success");
+            socket.off("room-users");
+            socket.off("signal");
+            socket.off("room-closed");
+        };
+    }, [id, socketId, isHost]);
 
-    } catch (err) {
-      console.error("🚨 peer getUserMedia failed:", err);
-      toast.error("카메라/마이크 권한을 허용해주세요.");
-    }
-  };
+    const initPeer = () => {
+        if (pc.current) return;
+        console.log("🧊 create new RTCPeerConnection");
+        pc.current = new RTCPeerConnection({
+            iceServers: [
+                { urls: "stun:stun.l.google.com:19302" },
+                {
+                    urls: "turn:openrelay.metered.ca:80",
+                    username: "openrelayproject",
+                    credential: "openrelayproject"
+                }
+            ]
+        });
 
-  const toggleMute = () => {
-    if (localStream.current) {
-      localStream.current.getAudioTracks().forEach(track => {
-        track.enabled = !track.enabled;
-      });
-      setMuted(!muted);
-    }
-  };
+        pc.current.onicecandidate = (e) => {
+            if (e.candidate) {
+                console.log("📡 sending ICE candidate");
+                socket.emit("signal", { roomId: id, data: e.candidate });
+            }
+        };
 
-  const toggleFullScreen = () => setIsFullScreen(!isFullScreen);
+        pc.current.ontrack = (e) => {
+            remoteVideo.current.srcObject = e.streams[0];
+            remoteAudio.current.srcObject = e.streams[0];
+        };
+    };
 
-  const startDrag = (e) => {
-    if (isFullScreen) return;
-    setDragging(true);
-    offset.current = { x: e.clientX - posX, y: e.clientY - posY };
-    window.addEventListener("mousemove", onDrag);
-    window.addEventListener("mouseup", stopDrag);
-  };
-  const onDrag = (e) => {
-    if (dragging) {
-      setPosX(e.clientX - offset.current.x);
-      setPosY(e.clientY - offset.current.y);
-    }
-  };
-  const stopDrag = () => {
-    setDragging(false);
-    window.removeEventListener("mousemove", onDrag);
-    window.removeEventListener("mouseup", stopDrag);
-  };
+    const startHostCall = async () => {
+        console.log("🎥 startHostCall 시작");
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            localStream.current = stream;
+            localVideo.current.srcObject = stream;
 
-  return (
-    <div style={{ position: "relative", width: "100%", height: "100vh", background: "#121212" }}>
-      <ToastContainer position="top-center" />
-      <video ref={remoteVideo} autoPlay style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-      <audio ref={remoteAudio} autoPlay />
+            initPeer();
+            stream.getTracks().forEach((track) => pc.current.addTrack(track, stream));
 
-      <div onClick={toggleFullScreen} onMouseDown={startDrag} style={{
-        position: "absolute",
-        top: isFullScreen ? 0 : posY,
-        left: isFullScreen ? 0 : posX,
-        width: isFullScreen ? "100%" : "clamp(150px, 20vw, 200px)",
-        height: isFullScreen ? "100%" : "clamp(100px, 15vh, 150px)",
-        border: "2px solid #eee",
-        cursor: isFullScreen ? "pointer" : "grab",
-        zIndex: 10,
-        background: "black",
-        transition: "0.3s"
-      }}>
-        <video ref={localVideo} autoPlay muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-      </div>
+            const offer = await pc.current.createOffer();
+            await pc.current.setLocalDescription(offer);
+            console.log("📤 offer 전송 완료");
+            socket.emit("signal", { roomId: id, data: offer });
+        } catch (err) {
+            console.error("🚨 host getUserMedia failed:", err);
+            toast.error("카메라/마이크 권한을 허용해주세요.");
+        }
+    };
 
-      <div style={{
-        position: "absolute", top: "10px", left: "50%", transform: "translateX(-50%)",
-        display: "flex", gap: "10px", zIndex: 20
-      }}>
-        {joined && (
-          <>
-            <button onClick={() => startHostCall("webcam")} style={btnStyle}>웹캠</button>
-            <button onClick={() => startHostCall("screen")} style={btnStyle}>화면 공유</button>
-            <button onClick={toggleMute} style={btnStyle}>{muted ? "마이크 켜기" : "마이크 끄기"}</button>
-            {isMobile && (
-              <>
-                <button onClick={() => setCameraFacing("user")} style={btnStyle}>전면</button>
-                <button onClick={() => setCameraFacing("environment")} style={btnStyle}>후면</button>
-              </>
-            )}
-          </>
-        )}
-      </div>
+    const handleOffer = async (offer) => {
+        try {
+            initPeer();
+            await pc.current.setRemoteDescription(new RTCSessionDescription(offer));
+            console.log("✅ remote description set (offer)");
 
-      {pendingCall && (
-        <div style={{
-          position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-          background: "#1e1e1e", color: "#eee", padding: "20px", borderRadius: "8px", zIndex: 30
-        }}>
-          <div style={{ marginBottom: "10px" }}>{pendingCall} 님과 통화를 시작하시겠습니까?</div>
-          <button onClick={() => { startHostCall(); socket.emit("allow-call", { roomId: id, allow: true }); setPendingCall(null); }} style={btnStyle}>허용</button>
-          <button onClick={() => { socket.emit("allow-call", { roomId: id, allow: false }); setPendingCall(null); }} style={{ ...btnStyle, background: "#444" }}>거부</button>
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            localStream.current = stream;
+            localVideo.current.srcObject = stream;
+
+            stream.getTracks().forEach((track) => pc.current.addTrack(track, stream));
+
+            const answer = await pc.current.createAnswer();
+            await pc.current.setLocalDescription(answer);
+            socket.emit("signal", { roomId: id, data: answer });
+
+            for (const c of pendingCandidates.current) {
+                await pc.current.addIceCandidate(new RTCIceCandidate(c));
+                console.log("✅ 추가로 ICE candidate 적용");
+            }
+            pendingCandidates.current = [];
+        } catch (err) {
+            console.error("🚨 peer getUserMedia failed:", err);
+            toast.error("카메라/마이크 권한을 허용해주세요.");
+        }
+    };
+
+    const toggleMute = () => {
+        if (localStream.current) {
+            const enabled = !muted;
+            localStream.current.getAudioTracks().forEach((track) => (track.enabled = enabled));
+            setMuted(!muted);
+        }
+    };
+
+    return (
+        <div style={{ width: "100%", height: "100vh", background: "black", position: "relative" }}>
+            <ToastContainer position="top-center" />
+            <video ref={remoteVideo} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <audio ref={remoteAudio} autoPlay />
+
+            <video
+                ref={localVideo}
+                autoPlay
+                muted
+                style={{
+                    position: "absolute",
+                    bottom: 20,
+                    right: 20,
+                    width: "clamp(120px, 20vw, 200px)",
+                    height: "auto",
+                    border: "2px solid #eee",
+                    zIndex: 10,
+                }}
+            />
+
+            <div style={{ position: "absolute", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 20 }}>
+                <button onClick={toggleMute} style={btnStyle}>
+                    {muted ? "마이크 켜기" : "마이크 끄기"}
+                </button>
+            </div>
         </div>
-      )}
-    </div>
-  );
+    );
 }
 
 const btnStyle = {
-  padding: "8px 12px", background: "#1e1e1e", color: "#eee", border: "none",
-  borderRadius: "8px", boxShadow: "0 2px 6px rgba(0,0,0,0.4)", cursor: "pointer", transition: "0.3s"
+    padding: "8px 12px",
+    background: "#1e1e1e",
+    color: "#eee",
+    border: "none",
+    borderRadius: "8px",
+    boxShadow: "0 2px 6px rgba(0,0,0,0.4)",
+    cursor: "pointer",
+    marginRight: "10px",
 };
-
