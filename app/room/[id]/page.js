@@ -19,6 +19,7 @@ export default function Room() {
   const remoteAudio = useRef();
   const pc = useRef();
   const localStream = useRef();
+  const arCanvasRef = useRef(null); // AR Canvas를 위한 Ref 추가
 
   const [socketId, setSocketId] = useState(null);
   const [joined, setJoined] = useState(false);
@@ -33,7 +34,13 @@ export default function Room() {
 
   const [isMobile, setIsMobile] = useState(false);
   const [cameraFacing, setCameraFacing] = useState("environment");
-  const [arMode, setArMode] = useState(false); // AR 모드 상태 추가
+  const [arMode, setArMode] = useState(false);
+
+  // ARComponent로부터 canvas가 준비되면 호출될 콜백
+  const handleArCanvasReady = (canvas) => {
+    arCanvasRef.current = canvas;
+    toast.success("AR 씬 준비 완료! 'AR 공유' 버튼으로 공유를 시작하세요.");
+  };
 
   useEffect(() => {
     if (typeof navigator !== "undefined") {
@@ -89,7 +96,7 @@ export default function Room() {
   }, [id, socketId]);
 
   const initPeerConnection = () => {
-    if (pc.current) return;
+    if (pc.current) pc.current.close(); // 기존 연결이 있다면 닫기
     pc.current = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
@@ -104,34 +111,23 @@ export default function Room() {
       if (e.candidate) socket.emit("signal", { roomId: id, data: e.candidate });
     };
     pc.current.ontrack = (e) => {
-      remoteVideo.current.srcObject = e.streams[0];
-      remoteAudio.current.srcObject = e.streams[0];
+      if (remoteVideo.current) remoteVideo.current.srcObject = e.streams[0];
+      if (remoteAudio.current) remoteAudio.current.srcObject = e.streams[0];
     };
   };
 
   const startHostCall = async (mode = "webcam") => {
     try {
-      const constraints = mode === "webcam"
-        ? isMobile ? { facingMode: cameraFacing } : true
-        : undefined;
+      stopLocalStream(); // 기존 스트림 정리
+      initPeerConnection();
 
       const stream = mode === "screen"
-        ? await navigator.mediaDevices.getDisplayMedia({ video: true })
-        : await navigator.mediaDevices.getUserMedia({ video: constraints, audio: true });
-
-      if (mode === "screen") {
-        try {
-          const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
-          mic.getAudioTracks().forEach(track => stream.addTrack(track));
-        } catch (err) {
-          console.warn("마이크 권한 거부됨:", err);
-        }
-      }
+        ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+        : await navigator.mediaDevices.getUserMedia({ video: isMobile ? { facingMode: cameraFacing } : true, audio: true });
 
       localStream.current = stream;
-      localVideo.current.srcObject = stream;
+      if(localVideo.current) localVideo.current.srcObject = stream;
 
-      initPeerConnection();
       stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
 
       const offer = await pc.current.createOffer();
@@ -144,16 +140,51 @@ export default function Room() {
     }
   };
 
+  const startArCall = async () => {
+    if (!arCanvasRef.current) {
+      toast.error("AR 씬이 아직 준비되지 않았습니다.");
+      return;
+    }
+    try {
+      stopLocalStream();
+      initPeerConnection();
+
+      const arVideoStream = arCanvasRef.current.captureStream(30); // 30fps로 캡처
+      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      const combinedStream = new MediaStream([
+        ...arVideoStream.getVideoTracks(),
+        ...audioStream.getAudioTracks()
+      ]);
+
+      localStream.current = combinedStream;
+      if(localVideo.current) localVideo.current.srcObject = combinedStream;
+
+      combinedStream.getTracks().forEach(track => pc.current.addTrack(track, combinedStream));
+
+      const offer = await pc.current.createOffer();
+      await pc.current.setLocalDescription(offer);
+      socket.emit("signal", { roomId: id, data: offer });
+      toast.success("AR 화면 공유를 시작합니다.");
+
+    } catch (err) {
+      console.error("🚨 AR Call failed:", err);
+      toast.error("AR 공유에 실패했습니다. 마이크 권한을 확인해주세요.");
+    }
+  };
+
   const handlePeerOffer = async (offer) => {
     try {
       initPeerConnection();
       await pc.current.setRemoteDescription(new RTCSessionDescription(offer));
+      
+      // AR 공유를 받는 입장이므로, 웹캠/마이크만 켠다.
       const stream = await navigator.mediaDevices.getUserMedia({
         video: isMobile ? { facingMode: cameraFacing } : true,
         audio: true
       });
       localStream.current = stream;
-      localVideo.current.srcObject = stream;
+      if(localVideo.current) localVideo.current.srcObject = stream;
       stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
 
       const answer = await pc.current.createAnswer();
@@ -205,81 +236,81 @@ export default function Room() {
   };
 
   const toggleARMode = () => {
+    // AR 모드로 전환 시, 기존 스트림을 중지하여 카메라 리소스를 해제
     if (!arMode) {
-      // AR 모드 켜기: WebRTC 관련 리소스를 먼저 확실히 정리합니다.
       stopLocalStream();
       if (pc.current) {
         pc.current.close();
         pc.current = null;
       }
-      // 상태를 바로 변경하지 않고, 브라우저가 카메라 리소스를 해제할 시간을 줍니다.
-      setTimeout(() => {
-        setArMode(true);
-      }, 200); // 200ms 지연
-    } else {
-      // AR 모드 끄기: 바로 상태를 변경합니다.
-      setArMode(false);
     }
+    setArMode(!arMode);
   };
 
-  // ... (기존 함수들) ...
-
   return (
-    <div style={{ position: "relative", width: "100%", height: "100vh", background: arMode ? "transparent" : "#121212" }}>
-      {arMode ? (
-        <ARComponent />
-      ) : (
-        <>
-          <ToastContainer position="top-center" />
+    <div style={{ position: "relative", width: "100%", height: "100vh", background: "#121212" }}>
+      <ToastContainer position="top-center" />
+
+      {/* 배경: AR 모드이거나, 상대방 비디오 */}
+      <div style={{ position: 'absolute', width: '100%', height: '100%' }}>
+        {arMode ? (
+          <ARComponent onCanvasReady={handleArCanvasReady} />
+        ) : (
           <video ref={remoteVideo} autoPlay style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          <audio ref={remoteAudio} autoPlay />
+        )}
+      </div>
+      <audio ref={remoteAudio} autoPlay />
 
-          <div onClick={toggleFullScreen} onMouseDown={startDrag} style={{
-            position: "absolute",
-            top: isFullScreen ? 0 : posY,
-            left: isFullScreen ? 0 : posX,
-            width: isFullScreen ? "100%" : "clamp(150px, 20vw, 200px)",
-            height: isFullScreen ? "100%" : "clamp(100px, 15vh, 150px)",
-            border: "2px solid #eee",
-            cursor: isFullScreen ? "pointer" : "grab",
-            zIndex: 10,
-            background: "black",
-            transition: "0.3s"
-          }}>
-            <video ref={localVideo} autoPlay muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          </div>
+      {/* 작은 창 (Draggable): 내 로컬 비디오 (웹캠 또는 AR 캡쳐 화면) */}
+      <div onClick={toggleFullScreen} onMouseDown={startDrag} style={{
+        position: "absolute",
+        top: isFullScreen ? 0 : posY,
+        left: isFullScreen ? 0 : posX,
+        width: isFullScreen ? "100%" : "clamp(150px, 20vw, 200px)",
+        height: isFullScreen ? "100%" : "clamp(100px, 15vh, 150px)",
+        border: "2px solid #eee",
+        cursor: isFullScreen ? "pointer" : "grab",
+        zIndex: 10,
+        background: "black",
+        transition: "0.3s"
+      }}>
+        <video ref={localVideo} autoPlay muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      </div>
 
-          <div style={{
-            position: "absolute", top: "10px", left: "50%", transform: "translateX(-50%)",
-            display: "flex", gap: "10px", zIndex: 20
-          }}>
-            {joined && (
+      {/* 컨트롤 버튼 */}
+      <div style={{
+        position: "absolute", top: "10px", left: "50%", transform: "translateX(-50%)",
+        display: "flex", gap: "10px", zIndex: 20
+      }}>
+        {joined && (
+          <>
+            {!arMode && <button onClick={() => startHostCall("webcam")} style={btnStyle}>웹캠</button>}
+            {!arMode && <button onClick={() => startHostCall("screen")} style={btnStyle}>화면 공유</button>}
+            {arMode && <button onClick={startArCall} style={btnStyle}>AR 공유</button>}
+            
+            <button onClick={toggleMute} style={btnStyle}>{muted ? "마이크 켜기" : "마이크 끄기"}</button>
+            <button onClick={toggleARMode} style={btnStyle}>{arMode ? "웹캠 전환" : "AR 전환"}</button>
+            
+            {isMobile && !arMode && (
               <>
-                <button onClick={() => startHostCall("webcam")} style={btnStyle}>웹캠</button>
-                <button onClick={() => startHostCall("screen")} style={btnStyle}>화면 공유</button>
-                <button onClick={toggleMute} style={btnStyle}>{muted ? "마이크 켜기" : "마이크 끄기"}</button>
-                <button onClick={toggleARMode} style={btnStyle}>{arMode ? "AR 끄기" : "AR 켜기"}</button> {/* AR 토글 버튼 */}
-                {isMobile && (
-                  <>
-                    <button onClick={() => setCameraFacing("user")} style={btnStyle}>전면</button>
-                    <button onClick={() => setCameraFacing("environment")} style={btnStyle}>후면</button>
-                  </>
-                )}
+                <button onClick={() => setCameraFacing("user")} style={btnStyle}>전면</button>
+                <button onClick={() => setCameraFacing("environment")} style={btnStyle}>후면</button>
               </>
             )}
-          </div>
+          </>
+        )}
+      </div>
 
-          {pendingCall && (
-            <div style={{
-              position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-              background: "#1e1e1e", color: "#eee", padding: "20px", borderRadius: "8px", zIndex: 30
-            }}>
-              <div style={{ marginBottom: "10px" }}>{pendingCall} 님과 통화를 시작하시겠습니까?</div>
-              <button onClick={() => { startHostCall(); socket.emit("allow-call", { roomId: id, allow: true }); setPendingCall(null); }} style={btnStyle}>허용</button>
-              <button onClick={() => { socket.emit("allow-call", { roomId: id, allow: false }); setPendingCall(null); }} style={{ ...btnStyle, background: "#444" }}>거부</button>
-            </div>
-          )}
-        </>
+      {/* 통화 수신 팝업 */}
+      {pendingCall && (
+        <div style={{
+          position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+          background: "#1e1e1e", color: "#eee", padding: "20px", borderRadius: "8px", zIndex: 30
+        }}>
+          <div style={{ marginBottom: "10px" }}>{pendingCall} 님과 통화를 시작하시겠습니까?</div>
+          <button onClick={() => { startHostCall(); socket.emit("allow-call", { roomId: id, allow: true }); setPendingCall(null); }} style={btnStyle}>허용</button>
+          <button onClick={() => { socket.emit("allow-call", { roomId: id, allow: false }); setPendingCall(null); }} style={{ ...btnStyle, background: "#444" }}>거부</button>
+        </div>
       )}
     </div>
   );

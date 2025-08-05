@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 
-const ARComponent = () => {
+const ARComponent = ({ onCanvasReady }) => {
   const sceneRef = useRef(null);
 
   useEffect(() => {
@@ -10,6 +10,21 @@ const ARComponent = () => {
     if (!sceneEl) {
       console.warn('ARComponent: sceneRef.current is null.');
       return;
+    }
+
+    const checkCanvas = () => {
+      const canvas = sceneEl.canvas;
+      if (canvas && onCanvasReady) {
+        onCanvasReady(canvas);
+      } else if (!canvas) {
+        setTimeout(checkCanvas, 100);
+      }
+    };
+
+    if (sceneEl.hasLoaded) {
+      checkCanvas();
+    } else {
+      sceneEl.addEventListener('loaded', checkCanvas, { once: true });
     }
 
     const handleClick = (event) => {
@@ -28,18 +43,17 @@ const ARComponent = () => {
       console.log("Target Found:", event.target);
       const targetPlane = event.target.querySelector('.target-plane');
       if (targetPlane) {
-        // Briefly show a yellow highlight on the plane
         targetPlane.setAttribute('opacity', '0.5');
         targetPlane.setAttribute('color', 'yellow');
-        setTimeout(() => {
-          targetPlane.setAttribute('opacity', '0');
-        }, 1000); // Highlight for 1 second
       }
     };
 
     const handleTargetLost = (event) => {
       console.log("Target Lost:", event.target);
-      // You could add logic here if needed when a target is lost
+      const targetPlane = event.target.querySelector('.target-plane');
+      if (targetPlane) {
+        targetPlane.setAttribute('opacity', '0');
+      }
     };
 
     const setupEventListeners = () => {
@@ -74,7 +88,7 @@ const ARComponent = () => {
       sceneEl.removeEventListener('loaded', setupEventListeners);
       console.log('ARComponent: Removed all event listeners.');
     };
-  }, []);
+  }, [onCanvasReady]);
 
   return (
     <div style={{ width: '100%', height: '100%' }}>
