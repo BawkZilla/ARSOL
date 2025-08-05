@@ -2,8 +2,10 @@
 
 import React, { useEffect, useRef } from 'react';
 
-const ARComponent = ({ onCanvasReady }) => {
+const ARComponent = ({ onStreamReady }) => {
   const sceneRef = useRef(null);
+  const videoRef = useRef(null);
+  const combinedCanvasRef = useRef(null);
 
   useEffect(() => {
     const sceneEl = sceneRef.current;
@@ -12,20 +14,50 @@ const ARComponent = ({ onCanvasReady }) => {
       return;
     }
 
-    const checkCanvas = () => {
-      const canvas = sceneEl.canvas;
-      if (canvas && onCanvasReady) {
-        onCanvasReady(canvas);
-      } else if (!canvas) {
-        setTimeout(checkCanvas, 100);
+    const setupStream = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+
+        const checkCanvas = () => {
+          const arCanvas = sceneEl.canvas;
+          if (arCanvas && videoRef.current) {
+            const video = videoRef.current;
+            const combinedCanvas = combinedCanvasRef.current;
+            const ctx = combinedCanvas.getContext('2d');
+
+            const drawFrames = () => {
+              ctx.drawImage(video, 0, 0, combinedCanvas.width, combinedCanvas.height);
+              ctx.drawImage(arCanvas, 0, 0, combinedCanvas.width, combinedCanvas.height);
+              requestAnimationFrame(drawFrames);
+            };
+
+            video.addEventListener('loadedmetadata', () => {
+              combinedCanvas.width = video.videoWidth;
+              combinedCanvas.height = video.videoHeight;
+              drawFrames();
+              if (onStreamReady) {
+                onStreamReady(combinedCanvas.captureStream());
+              }
+            });
+          } else {
+            setTimeout(checkCanvas, 100);
+          }
+        };
+
+        if (sceneEl.hasLoaded) {
+          checkCanvas();
+        } else {
+          sceneEl.addEventListener('loaded', checkCanvas, { once: true });
+        }
+      } catch (err) {
+        console.error("Error accessing camera: ", err);
       }
     };
 
-    if (sceneEl.hasLoaded) {
-      checkCanvas();
-    } else {
-      sceneEl.addEventListener('loaded', checkCanvas, { once: true });
-    }
+    setupStream();
 
     const handleClick = (event) => {
       const touchPoint = event.detail.intersection.point;
@@ -88,35 +120,39 @@ const ARComponent = ({ onCanvasReady }) => {
       sceneEl.removeEventListener('loaded', setupEventListeners);
       console.log('ARComponent: Removed all event listeners.');
     };
-  }, [onCanvasReady]);
+  }, [onStreamReady]);
 
   return (
-    <div style={{ width: '100%', height: '100%' }}>
-      <a-scene
-        ref={sceneRef}
-        mindar-image="imageTargetSrc: /targets.mind; autoStart: true;"
-        color-space="sRGB"
-        renderer="colorManagement: true, physicallyCorrectLights"
-        vr-mode-ui="enabled: false"
-        device-orientation-permission-ui="enabled: false"
-        cursor="rayOrigin: mouse; fuse: false;"
-        raycaster="objects: .target-plane"
-      >
-        <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      <video ref={videoRef} autoPlay playsInline style={{ display: 'none' }}></video>
+      <canvas ref={combinedCanvasRef} style={{ width: '100%', height: '100%' }}></canvas>
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
+        <a-scene
+          ref={sceneRef}
+          mindar-image="imageTargetSrc: /targets.mind; autoStart: true;"
+          color-space="sRGB"
+          renderer="colorManagement: true, physicallyCorrectLights"
+          vr-mode-ui="enabled: false"
+          device-orientation-permission-ui="enabled: false"
+          cursor="rayOrigin: mouse; fuse: false;"
+          raycaster="objects: .target-plane"
+        >
+          <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-        <a-entity mindar-image-target="targetIndex: 0">
-          <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
-        </a-entity>
-        <a-entity mindar-image-target="targetIndex: 1">
-          <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
-        </a-entity>
-        <a-entity mindar-image-target="targetIndex: 2">
-          <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
-        </a-entity>
-        <a-entity mindar-image-target="targetIndex: 3">
-          <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
-        </a-entity>
-      </a-scene>
+          <a-entity mindar-image-target="targetIndex: 0">
+            <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+          </a-entity>
+          <a-entity mindar-image-target="targetIndex: 1">
+            <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+          </a-entity>
+          <a-entity mindar-image-target="targetIndex: 2">
+            <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+          </a-entity>
+          <a-entity mindar-image-target="targetIndex: 3">
+            <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+          </a-entity>
+        </a-scene>
+      </div>
     </div>
   );
 };
