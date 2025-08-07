@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { socket } from "../../../lib/socket";
 import { ToastContainer, toast } from "react-toastify";
@@ -39,13 +39,18 @@ export default function Room() {
   const [isPeerInArMode, setIsPeerInArMode] = useState(false); // 상대방 AR 모드 상태
 
   // ARComponent로부터 stream이 준비되면 호출될 콜백
-  const handleArStreamReady = (stream) => {
+  const handleArStreamReady = useCallback((stream) => {
     if (arCallStarted.current) return; // 이미 통화가 시작되었으면 중복 실행 방지
     arStreamRef.current = stream;
     toast.success("AR 씬 준비 완료! 자동으로 공유를 시작합니다.");
     startArCall();
     arCallStarted.current = true; // 통화 시작 플래그 설정
-  };
+  }, []);
+
+  const memoizedARComponent = useMemo(() => {
+    return <ARComponent onStreamReady={handleArStreamReady} />;
+  }, [handleArStreamReady]);
+
 
   useEffect(() => {
     if (typeof navigator !== "undefined") {
@@ -292,7 +297,7 @@ export default function Room() {
       {/* --- 메인 비디오 영역 --- */}
       <div style={{ position: 'absolute', width: '100%', height: '100%' }}>
         {arMode ? (
-          <ARComponent onStreamReady={handleArStreamReady} />
+          memoizedARComponent
         ) : (
           <video ref={remoteVideo} autoPlay style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         )}
