@@ -343,7 +343,7 @@ export default function Room() {
             
             <button onClick={toggleMute} style={btnStyle}>{muted ? "마이크 켜기" : "마이크 끄기"}</button>
             <button onClick={toggleARMode} style={btnStyle}>{arMode ? "웹캠 전환" : "AR 전환"}</button>
-            {arMode && <button onClick={controlCommentsDrawer} style={btnStyle}>{isDrawerOpen ? "탭 닫기" : "주석 추가"}</button>}
+            {(arMode || isPeerInArMode) && <button onClick={controlCommentsDrawer} style={btnStyle}>{isDrawerOpen ? "탭 닫기" : "주석 추가"}</button>}
 
             
             
@@ -357,11 +357,11 @@ export default function Room() {
         )}
       </div>
 
-      {arMode && isDrawerOpen && (
+      {(arMode || isPeerInArMode) && isDrawerOpen && (
         <div style={{
           position:"absolute",
           top:0,
-          right: isDrawerOpen ? 0 : "-240px",  // 슬라이드 효과
+          right: isDrawerOpen ? 0 : "-240px",
           width:"240px",
           height:"100%",
           transition:"right .3s",
@@ -374,17 +374,14 @@ export default function Room() {
         }}>
           <h3 style={{margin:"0 0 12px"}}>주석 도구</h3>
 
-          {/* 마커 */}
           <button style={drawerBtnStyle} onClick={handleMarkerClick}>
             📍 마커
           </button>
 
-          {/* 텍스트 */}
           <button style={drawerBtnStyle} onClick={handleTextClick}>
             📝 텍스트
           </button>
 
-          {/* 3D 오브젝트 및 세부 항목 */}
           <button
             style={drawerBtnStyle}
             onClick={() => setShowObjectDetail(prev => !prev)}
