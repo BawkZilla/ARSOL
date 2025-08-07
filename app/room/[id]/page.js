@@ -1,200 +1,364 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { socket } from "../../../lib/socket";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import dynamic from "next/dynamic";
 
-export default function Page() {
-    const { id } = useParams();
-    const router = useRouter();
-    const remoteVideo = useRef();
-    const remoteAudio = useRef();
-    const pc = useRef();
-    const localStream = useRef();
-    const pendingCandidates = useRef([]);
-    const [socketId, setSocketId] = useState(null);
-    const [isHost, setIsHost] = useState(false);
-    const isHostRef = useRef(false);
-    const [muted, setMuted] = useState(false);
+const ARComponent = dynamic(
+  () => import("../../components/ARComponent"),
+  { ssr: false }
+);
 
-    useEffect(() => {
-        socket.on("start-call", () => {
-            console.log("📞 start-call 수신 → startHostCall()");
-            startHostCall();
-        });
-        return () => socket.off("start-call");
-    }, []);
+export default function Room() {
+  const { id } = useParams();
+  const router = useRouter();
+  const localVideo = useRef();
+  const remoteVideo = useRef();
+  const remoteAudio = useRef();
+  const pc = useRef();
+  const localStream = useRef();
+  const arStreamRef = useRef(null);
+  const arCallStarted = useRef(false); // AR 통화 시작 여부 플래그
 
-    useEffect(() => {
-        socket.on("connect", () => setSocketId(socket.id));
-        return () => socket.off("connect");
-    }, []);
+  const [socketId, setSocketId] = useState(null);
+  const [joined, setJoined] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [pendingCall, setPendingCall] = useState(null);
 
-    useEffect(() => {
-        if (socketId && id) {
-            socket.emit("join-room", { roomId: id, password: "", nickname: "익명" });
-        }
-    }, [socketId, id]);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [posX, setPosX] = useState(20);
+  const [posY, setPosY] = useState(20);
+  const [dragging, setDragging] = useState(false);
+  const offset = useRef({ x: 0, y: 0 });
 
-    useEffect(() => {
-        socket.on("join-success", ({ isHost }) => {
-            setIsHost(isHost);
-            isHostRef.current = isHost;
-            console.log("🎉 join-success received, isHost:", isHost);
-        });
+  const [isMobile, setIsMobile] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState("environment");
+  const [arMode, setArMode] = useState(false); // 내 AR 모드 상태
+  const [isPeerInArMode, setIsPeerInArMode] = useState(false); // 상대방 AR 모드 상태
 
-        socket.on("signal", async ({ data }) => {
-            console.log("📡 signal 수신:", data);
+  // ARComponent로부터 stream이 준비되면 호출될 콜백
+  const handleArStreamReady = useCallback((stream) => {
+    if (arCallStarted.current) return; // 이미 통화가 시작되었으면 중복 실행 방지
+    arStreamRef.current = stream;
+    toast.success("AR 씬 준비 완료! 자동으로 공유를 시작합니다.");
+    startArCall();
+    arCallStarted.current = true; // 통화 시작 플래그 설정
+  }, []);
 
-            if (data.type === "offer") {
-                await handleOffer(data);
-            } else if (data.type === "answer") {
-                await pc.current.setRemoteDescription(new RTCSessionDescription(data));
-            } else if (data.candidate) {
-                if (pc.current?.remoteDescription) {
-                    await pc.current.addIceCandidate(new RTCIceCandidate(data));
-                } else {
-                    pendingCandidates.current.push(data);
-                }
-            }
-        });
+  const memoizedARComponent = useMemo(() => {
+    return <ARComponent onStreamReady={handleArStreamReady} />;
+  }, [handleArStreamReady]);
 
-        socket.on("room-closed", () => {
-            toast.error("방장이 방을 닫았습니다.");
-            setTimeout(() => router.push("/rooms"), 2000);
-        });
 
-        return () => {
-            socket.emit("leave-room", id);
-            socket.off("join-success");
-            socket.off("signal");
-            socket.off("room-closed");
-        };
-    }, [id, socketId]);
+  useEffect(() => {
+    if (typeof navigator !== "undefined") {
+      if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        setIsMobile(true);
+      }
+    }
+  }, []);
 
-    const initPeer = () => {
-        if (pc.current) return;
-        console.log("🧊 initPeer 실행");
-        pc.current = new RTCPeerConnection({
-            iceServers: [
-                { urls: "stun:stun.l.google.com:19302" },
-                {
-                    urls: "turn:relay1.expressturn.com:3478",
-                    username: "efGHj2T1zXv7YR01aY2M6g==",
-                    credential: "FGY2qbd9rHG+fLOq6yNB4zKq6ak="
-                }
-            ]
-        });
+  useEffect(() => {
+    socket.on("connect", () => setSocketId(socket.id));
+    return () => socket.off("connect");
+  }, []);
 
-        pc.current.onicecandidate = (e) => {
-            if (e.candidate) {
-                socket.emit("signal", { roomId: id, data: e.candidate });
-            }
-        };
+  useEffect(() => {
+    if (!id || !socketId) return;
+    socket.emit("join-room", { roomId: id, password: "", nickname: "익명" });
+  }, [id, socketId]);
 
-        pc.current.ontrack = (e) => {
-            console.log("📺 ontrack fired");
-            if (isHostRef.current) {
-                console.log("🙅 방장은 수신 무시");
-                return;
-            }
-            console.log("✅ 참가자: 방장 화면 수신");
-            remoteVideo.current.srcObject = e.streams[0];
-            remoteAudio.current.srcObject = e.streams[0];
-        };
+  useEffect(() => {
+    socket.on("room-users", ({ users }) => setJoined(users.length >= 2));
+    socket.on("ask-call-permission", ({ expertNickname }) => setPendingCall(expertNickname));
+    socket.on("call-permission-result", ({ allow }) => {
+      if (!allow) {
+        toast.error("방장이 통화를 거부했습니다.");
+        setTimeout(() => router.push("/rooms"), 2000);
+      }
+    });
+    socket.on("force-leave", () => {
+      toast.error("방에서 내보내졌습니다.");
+      setTimeout(() => router.push("/rooms"), 2000);
+    });
+    socket.on("room-closed", () => {
+      toast.error("방장이 방을 닫았습니다.");
+      setTimeout(() => router.push("/rooms"), 2000);
+    });
+    socket.on("signal", async ({ data }) => {
+      if (data.type === "offer") await handlePeerOffer(data);
+      else if (data.type === "answer") await pc.current.setRemoteDescription(new RTCSessionDescription(data));
+      else if (data.candidate) await pc.current.addIceCandidate(new RTCIceCandidate(data));
+    });
+    // 상대방의 AR 모드 변경을 감지
+    socket.on("peer-ar-mode-changed", ({ arMode: peerArStatus }) => {
+      setIsPeerInArMode(peerArStatus);
+      if (peerArStatus) {
+        toast.info("상대방이 AR 모드로 전환했습니다.");
+      } else {
+        toast.info("상대방이 웹캠 모드로 전환했습니다.");
+      }
+    });
 
-        pc.current.onconnectionstatechange = () => {
-            console.log("🔗 WebRTC 연결 상태:", pc.current.connectionState);
-        };
+    return () => {
+      socket.emit("leave-room", id);
+      socket.off("room-users");
+      socket.off("ask-call-permission");
+      socket.off("call-permission-result");
+      socket.off("force-leave");
+      socket.off("room-closed");
+      socket.off("signal");
+      socket.off("peer-ar-mode-changed");
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, socketId]);
 
-    const getCameraStream = async () => {
-        try {
-            return await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: { ideal: "environment" } },
-                audio: true
-            });
-        } catch (err) {
-            return await navigator.mediaDevices.getUserMedia({
-                video: true,
-                audio: true
-            });
-        }
+  // 마이크 음소거 상태가 변경될 때마다 스트림에 즉시 반영
+  useEffect(() => {
+    if (localStream.current) {
+      localStream.current.getAudioTracks().forEach(track => {
+        track.enabled = !muted;
+      });
+    }
+  }, [muted]);
+
+  const initPeerConnection = () => {
+    if (pc.current) pc.current.close(); // 기존 연결이 있다면 닫기
+    pc.current = new RTCPeerConnection({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        {
+          urls: "turn:openrelay.metered.ca:80",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+      ],
+    });
+    pc.current.onicecandidate = (e) => {
+      if (e.candidate) socket.emit("signal", { roomId: id, data: e.candidate });
     };
-
-    const startHostCall = async () => {
-        console.log("🎥 startHostCall 시작");
-        try {
-            const stream = await getCameraStream();
-            localStream.current = stream;
-
-            // 방장도 본인 화면 보기
-            remoteVideo.current.srcObject = stream;
-            remoteAudio.current.srcObject = stream;
-
-            initPeer();
-            stream.getTracks().forEach((track) => pc.current.addTrack(track, stream));
-
-            const offer = await pc.current.createOffer();
-            await pc.current.setLocalDescription(offer);
-            socket.emit("signal", { roomId: id, data: offer });
-        } catch (err) {
-            toast.error("카메라/마이크 권한을 허용해주세요.");
-        }
+    pc.current.ontrack = (e) => {
+      if (remoteVideo.current) remoteVideo.current.srcObject = e.streams[0];
+      if (remoteAudio.current) remoteAudio.current.srcObject = e.streams[0];
     };
+  };
 
-    const handleOffer = async (offer) => {
-        try {
-            initPeer();
-            await pc.current.setRemoteDescription(new RTCSessionDescription(offer));
+  const startHostCall = async (mode = "webcam") => {
+    try {
+      stopLocalStream(); // 기존 스트림 정리
+      initPeerConnection();
 
-            const stream = await getCameraStream();
-            localStream.current = stream;
-            stream.getTracks().forEach((track) => pc.current.addTrack(track, stream));
+      const stream = mode === "screen"
+        ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+        : await navigator.mediaDevices.getUserMedia({ video: isMobile ? { facingMode: cameraFacing } : true, audio: true });
 
-            const answer = await pc.current.createAnswer();
-            await pc.current.setLocalDescription(answer);
-            socket.emit("signal", { roomId: id, data: answer });
+      // 통화 시작 시 음소거 상태 반영
+      stream.getAudioTracks().forEach(track => track.enabled = !muted);
 
-            for (const c of pendingCandidates.current) {
-                await pc.current.addIceCandidate(new RTCIceCandidate(c));
-            }
-            pendingCandidates.current = [];
-        } catch (err) {
-            toast.error("카메라/마이크 권한을 허용해주세요.");
-        }
-    };
+      localStream.current = stream;
+      if(localVideo.current) localVideo.current.srcObject = stream;
 
-    const toggleMute = () => {
-        if (localStream.current) {
-            const enabled = !muted;
-            localStream.current.getAudioTracks().forEach((track) => (track.enabled = enabled));
-            setMuted(!muted);
-        }
-    };
+      stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
 
-    return (
-        <div style={{ width: "100%", height: "100vh", background: "black", position: "relative" }}>
-            <ToastContainer position="top-center" />
-            <video ref={remoteVideo} autoPlay playsInline muted={isHost} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            <audio ref={remoteAudio} autoPlay />
-            <div style={{ position: "absolute", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 20 }}>
-                <button onClick={toggleMute} style={btnStyle}>
-                    {muted ? "마이크 켜기" : "마이크 끄기"}
-                </button>
-            </div>
+      const offer = await pc.current.createOffer();
+      await pc.current.setLocalDescription(offer);
+      socket.emit("signal", { roomId: id, data: offer });
+
+    } catch (err) {
+      console.error("🚨 host getUserMedia failed:", err);
+      toast.error("카메라/마이크 권한을 허용해주세요.");
+    }
+  };
+
+  const startArCall = async () => {
+    if (!arStreamRef.current) {
+      toast.error("AR 씬이 아직 준비되지 않았습니다.");
+      return;
+    }
+    try {
+      stopLocalStream();
+      initPeerConnection();
+
+      const arStream = arStreamRef.current; // Video-only stream from canvas
+      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      const audioTrack = audioStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !muted; // 현재 마이크 음소거 상태를 반영
+        arStream.addTrack(audioTrack);
+      }
+
+      localStream.current = arStream; // Now arStream contains both video and audio
+
+      localStream.current.getTracks().forEach(track => pc.current.addTrack(track, localStream.current));
+
+      const offer = await pc.current.createOffer();
+      await pc.current.setLocalDescription(offer);
+      socket.emit("signal", { roomId: id, data: offer });
+
+    } catch (err) {
+      console.error("🚨 AR Call failed:", err);
+      toast.error("AR 공유에 실패했습니다. 마이크 권한을 확인해주세요.");
+    }
+  };
+
+  const handlePeerOffer = async (offer) => {
+    try {
+      initPeerConnection();
+      await pc.current.setRemoteDescription(new RTCSessionDescription(offer));
+      
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: isMobile ? { facingMode: cameraFacing } : true,
+        audio: true
+      });
+
+      // 통화 시작 시 음소거 상태 반영
+      stream.getAudioTracks().forEach(track => track.enabled = !muted);
+      
+      localStream.current = stream;
+      if(localVideo.current) localVideo.current.srcObject = stream;
+      stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
+
+      const answer = await pc.current.createAnswer();
+      await pc.current.setLocalDescription(answer);
+      socket.emit("signal", { roomId: id, data: answer });
+
+    } catch (err) {
+      console.error("🚨 peer getUserMedia failed:", err);
+      toast.error("카메라/마이크 권한을 허용해주세요.");
+    }
+  };
+
+  const toggleMute = () => {
+    setMuted(prevMuted => !prevMuted);
+  };
+
+  const toggleFullScreen = () => {
+    if (!arMode) {
+      setIsFullScreen(!isFullScreen);
+    }
+  };
+
+  const startDrag = (e) => {
+    if (isFullScreen || arMode) return; // AR 모드에서는 드래그 방지
+    setDragging(true);
+    offset.current = { x: e.clientX - posX, y: e.clientY - posY };
+    window.addEventListener("mousemove", onDrag);
+    window.addEventListener("mouseup", stopDrag);
+  };
+  const onDrag = (e) => {
+    if (dragging) {
+      setPosX(e.clientX - offset.current.x);
+      setPosY(e.clientY - offset.current.y);
+    }
+  };
+  const stopDrag = () => {
+    setDragging(false);
+    window.removeEventListener("mousemove", onDrag);
+    window.removeEventListener("mouseup", stopDrag);
+  };
+
+  const stopLocalStream = () => {
+    if (localStream.current) {
+      localStream.current.getTracks().forEach(track => track.stop());
+      localStream.current = null;
+      if(localVideo.current) localVideo.current.srcObject = null;
+    }
+  };
+
+  const toggleARMode = () => {
+    const newArMode = !arMode;
+    arCallStarted.current = false; // AR 통화 플래그 초기화
+
+    stopLocalStream();
+    if (pc.current) {
+      pc.current.close();
+      pc.current = null;
+    }
+    
+    setArMode(newArMode);
+    socket.emit("ar-mode-change", { roomId: id, arMode: newArMode });
+
+    if (!newArMode) {
+      startHostCall("webcam");
+      const mindarContainer = document.querySelector(".mindar-ui-overlay");
+      if (mindarContainer) {
+        mindarContainer.remove();
+      }
+    }
+  };
+
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100vh", background: "#121212" }}>
+      <ToastContainer position="top-center" />
+
+      {/* --- 메인 비디오 영역 --- */}
+      <div style={{ position: 'absolute', width: '100%', height: '100%' }}>
+        {arMode ? (
+          memoizedARComponent
+        ) : (
+          <video ref={remoteVideo} autoPlay style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        )}
+      </div>
+      <audio ref={remoteAudio} autoPlay />
+
+      {/* --- 로컬 비디오 영역 --- */}
+      {!arMode && (
+        <div onClick={toggleFullScreen} onMouseDown={startDrag} style={{
+          position: "absolute",
+          top: isFullScreen ? 0 : posY,
+          left: isFullScreen ? 0 : posX,
+          width: isFullScreen ? "100%" : "clamp(150px, 20vw, 200px)",
+          height: isFullScreen ? "100%" : "clamp(100px, 15vh, 150px)",
+          border: "2px solid #eee",
+          cursor: isFullScreen ? "pointer" : "grab",
+          zIndex: 10,
+          background: "black",
+          transition: "0.3s"
+        }}>
+          <video ref={localVideo} autoPlay muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         </div>
-    );
+      )}
+
+      <div style={{
+        position: "absolute", top: "10px", left: "50%", transform: "translateX(-50%)",
+        display: "flex", gap: "10px", zIndex: 20
+      }}>
+        {joined && (
+          <>
+            {!arMode && <button onClick={() => startHostCall("webcam")} style={btnStyle}>웹캠</button>}
+            {!arMode && <button onClick={() => startHostCall("screen")} style={btnStyle}>화면 공유</button>}
+            
+            <button onClick={toggleMute} style={btnStyle}>{muted ? "마이크 켜기" : "마이크 끄기"}</button>
+            <button onClick={toggleARMode} style={btnStyle}>{arMode ? "웹캠 전환" : "AR 전환"}</button>
+            
+            {isMobile && !arMode && (
+              <>
+                <button onClick={() => setCameraFacing("user")} style={btnStyle}>전면</button>
+                <button onClick={() => setCameraFacing("environment")} style={btnStyle}>후면</button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      {pendingCall && (
+        <div style={{
+          position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+          background: "#1e1e1e", color: "#eee", padding: "20px", borderRadius: "8px", zIndex: 30
+        }}>
+          <div style={{ marginBottom: "10px" }}>{pendingCall} 님과 통화를 시작하시겠습니까?</div>
+          <button onClick={() => { startHostCall(); socket.emit("allow-call", { roomId: id, allow: true }); setPendingCall(null); }} style={btnStyle}>허용</button>
+          <button onClick={() => { socket.emit("allow-call", { roomId: id, allow: false }); setPendingCall(null); }} style={{ ...btnStyle, background: "#444" }}>거부</button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 const btnStyle = {
-    padding: "8px 12px",
-    background: "#1e1e1e",
-    color: "#eee",
-    border: "none",
-    borderRadius: "8px",
-    boxShadow: "0 2px 6px rgba(0,0,0,0.4)",
-    cursor: "pointer",
-    marginRight: "10px",
+  padding: "8px 12px", background: "#1e1e1e", color: "#eee", border: "none",
+  borderRadius: "8px", boxShadow: "0 2px 6px rgba(0,0,0,0.4)", cursor: "pointer", transition: "0.3s"
 };
