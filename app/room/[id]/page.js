@@ -37,6 +37,8 @@ export default function Room() {
   const [cameraFacing, setCameraFacing] = useState("environment");
   const [arMode, setArMode] = useState(false); // 내 AR 모드 상태
   const [isPeerInArMode, setIsPeerInArMode] = useState(false); // 상대방 AR 모드 상태
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [showObjectDetail, setShowObjectDetail] = useState(false); // drawer 내 3D 오브젝트 영역 세부요소 토글
 
   // ARComponent로부터 stream이 준비되면 호출될 콜백
   const handleArStreamReady = useCallback((stream) => {
@@ -241,6 +243,14 @@ export default function Room() {
     }
   };
 
+  const controlCommentsDrawer = () => setIsDrawerOpen(prev => !prev);
+
+  const handleMarkerClick = () => {console.log("marker");};
+  const handleTextClick   = () => {console.log("text");};
+  const handleCPUClick    = () => {console.log("cpu");};
+  const handleRAMClick    = () => {console.log("ram");};
+  const handleGPUClick    = () => {console.log("gpu");};
+
   const startDrag = (e) => {
     if (isFullScreen || arMode) return; // AR 모드에서는 드래그 방지
     setDragging(true);
@@ -333,6 +343,9 @@ export default function Room() {
             
             <button onClick={toggleMute} style={btnStyle}>{muted ? "마이크 켜기" : "마이크 끄기"}</button>
             <button onClick={toggleARMode} style={btnStyle}>{arMode ? "웹캠 전환" : "AR 전환"}</button>
+            {arMode && <button onClick={controlCommentsDrawer} style={btnStyle}>{isDrawerOpen ? "탭 닫기" : "주석 추가"}</button>}
+
+            
             
             {isMobile && !arMode && (
               <>
@@ -343,6 +356,51 @@ export default function Room() {
           </>
         )}
       </div>
+
+      {arMode && isDrawerOpen && (
+        <div style={{
+          position:"absolute",
+          top:0,
+          right: isDrawerOpen ? 0 : "-240px",  // 슬라이드 효과
+          width:"240px",
+          height:"100%",
+          transition:"right .3s",
+          background:"#1e1e1e",
+          color:"#eee",
+          boxShadow:"-2px 0 6px rgba(0,0,0,.6)",
+          zIndex:30,
+          padding:"16px",
+          overflowY:"auto"
+        }}>
+          <h3 style={{margin:"0 0 12px"}}>주석 도구</h3>
+
+          {/* 마커 */}
+          <button style={drawerBtnStyle} onClick={handleMarkerClick}>
+            📍 마커
+          </button>
+
+          {/* 텍스트 */}
+          <button style={drawerBtnStyle} onClick={handleTextClick}>
+            📝 텍스트
+          </button>
+
+          {/* 3D 오브젝트 및 세부 항목 */}
+          <button
+            style={drawerBtnStyle}
+            onClick={() => setShowObjectDetail(prev => !prev)}
+          >
+            🧊 3D 오브젝트
+          </button>
+
+          {showObjectDetail && (
+            <div style={{marginLeft:"12px", marginTop:"8px", display:"flex", flexDirection:"column", gap:"6px"}}>
+              <button style={subBtnStyle} onClick={handleCPUClick}>CPU</button>
+              <button style={subBtnStyle} onClick={handleRAMClick}>RAM</button>
+              <button style={subBtnStyle} onClick={handleGPUClick}>GPU</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {pendingCall && (
         <div style={{
@@ -361,4 +419,21 @@ export default function Room() {
 const btnStyle = {
   padding: "8px 12px", background: "#1e1e1e", color: "#eee", border: "none",
   borderRadius: "8px", boxShadow: "0 2px 6px rgba(0,0,0,0.4)", cursor: "pointer", transition: "0.3s"
+};
+
+const drawerBtnStyle = {
+  width:"100%",
+  padding:"10px",
+  marginBottom:"8px",
+  textAlign:"left",
+  background:"#2b2b2b",
+  color:"#eee",
+  border:"none",
+  borderRadius:"6px",
+  cursor:"pointer"
+};
+const subBtnStyle = {
+  ...drawerBtnStyle,
+  background:"#3a3a3a",
+  fontSize:"0.9rem"
 };

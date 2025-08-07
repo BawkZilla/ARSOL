@@ -176,13 +176,13 @@ const ARComponent = ({ onStreamReady }) => {
             <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
           </a-entity>
           <a-entity mindar-image-target="targetIndex: 1">
-            <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+            <a-plane class="target-plane" color="blue" opacity="0" position="0 0 0" rotation="-85 0 0" width="1" height="1"></a-plane>
           </a-entity>
           <a-entity mindar-image-target="targetIndex: 2">
-            <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+            <a-plane class="target-plane" color="red" opacity="0" position="0 0 0" rotation="-80 0 0" width="1" height="1"></a-plane>
           </a-entity>
           <a-entity mindar-image-target="targetIndex: 3">
-            <a-plane class="target-plane" color="yellow" opacity="0" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+            <a-plane class="target-plane" color="black" opacity="0" position="0 0 0" rotation="-75 0 0" width="1" height="1"></a-plane>
           </a-entity>
         </a-scene>
       </div>
