@@ -97,6 +97,11 @@ io.on("connection", (socket) => {
         socket.to(roomId).emit("signal", { from: socket.id, data });
     });
 
+    socket.on("ar-mode-change", ({ roomId, arMode }) => {
+        console.log(`AR mode change in room ${roomId} from ${socket.id}. New mode: ${arMode}`);
+        socket.to(roomId).emit("peer-ar-mode-changed", { arMode });
+    });
+
     socket.on("leave-room", (roomId) => handleLeave(socket, roomId));
 
     socket.on("disconnect", () => {

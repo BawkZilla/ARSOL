@@ -34,7 +34,8 @@ export default function Room() {
 
   const [isMobile, setIsMobile] = useState(false);
   const [cameraFacing, setCameraFacing] = useState("environment");
-  const [arMode, setArMode] = useState(false);
+  const [arMode, setArMode] = useState(false); // 내 AR 모드 상태
+  const [isPeerInArMode, setIsPeerInArMode] = useState(false); // 상대방 AR 모드 상태
 
   // ARComponent로부터 stream이 준비되면 호출될 콜백
   const handleArStreamReady = (stream) => {
@@ -83,6 +84,15 @@ export default function Room() {
       else if (data.type === "answer") await pc.current.setRemoteDescription(new RTCSessionDescription(data));
       else if (data.candidate) await pc.current.addIceCandidate(new RTCIceCandidate(data));
     });
+    // 상대방의 AR 모드 변경을 감지
+    socket.on("peer-ar-mode-changed", ({ arMode: peerArStatus }) => {
+      setIsPeerInArMode(peerArStatus);
+      if (peerArStatus) {
+        toast.info("상대방이 AR 모드로 전환했습니다.");
+      } else {
+        toast.info("상대방이 웹캠 모드로 전환했습니다.");
+      }
+    });
 
     return () => {
       socket.emit("leave-room", id);
@@ -92,6 +102,7 @@ export default function Room() {
       socket.off("force-leave");
       socket.off("room-closed");
       socket.off("signal");
+      socket.off("peer-ar-mode-changed");
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, socketId]);
@@ -159,7 +170,6 @@ export default function Room() {
       ]);
 
       localStream.current = combinedStream;
-      if(localVideo.current) localVideo.current.srcObject = combinedStream;
 
       combinedStream.getTracks().forEach(track => pc.current.addTrack(track, combinedStream));
 
@@ -205,10 +215,14 @@ export default function Room() {
     }
   };
 
-  const toggleFullScreen = () => setIsFullScreen(!isFullScreen);
+  const toggleFullScreen = () => {
+    if (!arMode) {
+      setIsFullScreen(!isFullScreen);
+    }
+  };
 
   const startDrag = (e) => {
-    if (isFullScreen) return;
+    if (isFullScreen || arMode) return; // AR 모드에서는 드래그 방지
     setDragging(true);
     offset.current = { x: e.clientX - posX, y: e.clientY - posY };
     window.addEventListener("mousemove", onDrag);
@@ -235,20 +249,34 @@ export default function Room() {
   };
 
   const toggleARMode = () => {
-    if (!arMode) {
-      stopLocalStream();
-      if (pc.current) {
-        pc.current.close();
-        pc.current = null;
+    const newArMode = !arMode;
+    // AR 모드 변경 시 스트림 및 연결 초기화
+    stopLocalStream();
+    if (pc.current) {
+      pc.current.close();
+      pc.current = null;
+    }
+    
+    setArMode(newArMode);
+    // 변경된 AR 상태를 상대방에게 알림
+    socket.emit("ar-mode-change", { roomId: id, arMode: newArMode });
+
+    // 웹캠 모드로 돌아올 때, 자동으로 웹캠 통화 시작
+    if (!newArMode) {
+      startHostCall("webcam");
+      // MindAR UI 오버레이 제거
+      const mindarContainer = document.querySelector(".mindar-ui-overlay");
+      if (mindarContainer) {
+        mindarContainer.remove();
       }
     }
-    setArMode(!arMode);
   };
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh", background: "#121212" }}>
       <ToastContainer position="top-center" />
 
+      {/* --- 메인 비디오 영역 --- */}
       <div style={{ position: 'absolute', width: '100%', height: '100%' }}>
         {arMode ? (
           <ARComponent onStreamReady={handleArStreamReady} />
@@ -258,20 +286,23 @@ export default function Room() {
       </div>
       <audio ref={remoteAudio} autoPlay />
 
-      <div onClick={toggleFullScreen} onMouseDown={startDrag} style={{
-        position: "absolute",
-        top: isFullScreen ? 0 : posY,
-        left: isFullScreen ? 0 : posX,
-        width: isFullScreen ? "100%" : "clamp(150px, 20vw, 200px)",
-        height: isFullScreen ? "100%" : "clamp(100px, 15vh, 150px)",
-        border: "2px solid #eee",
-        cursor: isFullScreen ? "pointer" : "grab",
-        zIndex: 10,
-        background: "black",
-        transition: "0.3s"
-      }}>
-        <video ref={localVideo} autoPlay muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-      </div>
+      {/* --- 로컬 비디오 영역 --- */}
+      {!arMode && (
+        <div onClick={toggleFullScreen} onMouseDown={startDrag} style={{
+          position: "absolute",
+          top: isFullScreen ? 0 : posY,
+          left: isFullScreen ? 0 : posX,
+          width: isFullScreen ? "100%" : "clamp(150px, 20vw, 200px)",
+          height: isFullScreen ? "100%" : "clamp(100px, 15vh, 150px)",
+          border: "2px solid #eee",
+          cursor: isFullScreen ? "pointer" : "grab",
+          zIndex: 10,
+          background: "black",
+          transition: "0.3s"
+        }}>
+          <video ref={localVideo} autoPlay muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        </div>
+      )}
 
       <div style={{
         position: "absolute", top: "10px", left: "50%", transform: "translateX(-50%)",

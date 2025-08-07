@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, { useEffect, useRef } from 'react';
 
@@ -13,6 +13,15 @@ const ARComponent = ({ onStreamReady }) => {
       console.warn('ARComponent: sceneRef.current is null.');
       return;
     }
+
+    let mindarSystem = null;
+
+    const startMindAR = () => {
+      mindarSystem = sceneEl.systems['mindar-image-system'];
+      if (mindarSystem) {
+        mindarSystem.start(); // MindAR 엔진 수동 시작
+      }
+    };
 
     const setupStream = async () => {
       try {
@@ -29,6 +38,7 @@ const ARComponent = ({ onStreamReady }) => {
             const ctx = combinedCanvas.getContext('2d');
 
             const drawFrames = () => {
+              if (!videoRef.current) return; // Cleanup check
               ctx.drawImage(video, 0, 0, combinedCanvas.width, combinedCanvas.height);
               ctx.drawImage(arCanvas, 0, 0, combinedCanvas.width, combinedCanvas.height);
               requestAnimationFrame(drawFrames);
@@ -48,9 +58,13 @@ const ARComponent = ({ onStreamReady }) => {
         };
 
         if (sceneEl.hasLoaded) {
+          startMindAR();
           checkCanvas();
         } else {
-          sceneEl.addEventListener('loaded', checkCanvas, { once: true });
+          sceneEl.addEventListener('loaded', () => {
+            startMindAR();
+            checkCanvas();
+          }, { once: true });
         }
       } catch (err) {
         console.error("Error accessing camera: ", err);
@@ -107,7 +121,19 @@ const ARComponent = ({ onStreamReady }) => {
       sceneEl.addEventListener('loaded', setupEventListeners);
     }
 
+    // Cleanup function
     return () => {
+      console.log('ARComponent: Cleaning up...');
+      // Stop MindAR engine
+      if (mindarSystem) {
+        mindarSystem.stop();
+      }
+      // Stop camera stream
+      if (videoRef.current && videoRef.current.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+        videoRef.current.srcObject = null;
+      }
+      // Remove event listeners
       const targetEntities = sceneEl.querySelectorAll('[mindar-image-target]');
       targetEntities.forEach(target => {
         const plane = target.querySelector('.target-plane');
@@ -118,7 +144,14 @@ const ARComponent = ({ onStreamReady }) => {
         target.removeEventListener('targetLost', handleTargetLost);
       });
       sceneEl.removeEventListener('loaded', setupEventListeners);
-      console.log('ARComponent: Removed all event listeners.');
+
+      // Remove MindAR UI elements
+      const uiOverlay = document.querySelector('.mindar-ui-overlay');
+      if (uiOverlay) uiOverlay.remove();
+      const scanningOverlay = document.querySelector('.mindar-ui-scanning');
+      if (scanningOverlay) scanningOverlay.remove();
+
+      console.log('ARComponent: Cleanup complete.');
     };
   }, [onStreamReady]);
 
@@ -129,7 +162,7 @@ const ARComponent = ({ onStreamReady }) => {
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
         <a-scene
           ref={sceneRef}
-          mindar-image="imageTargetSrc: /targets.mind; autoStart: true;"
+          mindar-image="imageTargetSrc: /targets.mind; autoStart: false;"
           color-space="sRGB"
           renderer="colorManagement: true, physicallyCorrectLights"
           vr-mode-ui="enabled: false"
