@@ -20,6 +20,7 @@ export default function Room() {
   const pc = useRef();
   const localStream = useRef();
   const arStreamRef = useRef(null);
+  const arCallStarted = useRef(false); // AR 통화 시작 여부 플래그
 
   const [socketId, setSocketId] = useState(null);
   const [joined, setJoined] = useState(false);
@@ -39,9 +40,11 @@ export default function Room() {
 
   // ARComponent로부터 stream이 준비되면 호출될 콜백
   const handleArStreamReady = (stream) => {
+    if (arCallStarted.current) return; // 이미 통화가 시작되었으면 중복 실행 방지
     arStreamRef.current = stream;
     toast.success("AR 씬 준비 완료! 자동으로 공유를 시작합니다.");
-    startArCall(); // 스트림이 준비되면 바로 통화 시작
+    startArCall();
+    arCallStarted.current = true; // 통화 시작 플래그 설정
   };
 
   useEffect(() => {
@@ -107,6 +110,15 @@ export default function Room() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, socketId]);
 
+  // 마이크 음소거 상태가 변경될 때마다 스트림에 즉시 반영
+  useEffect(() => {
+    if (localStream.current) {
+      localStream.current.getAudioTracks().forEach(track => {
+        track.enabled = !muted;
+      });
+    }
+  }, [muted]);
+
   const initPeerConnection = () => {
     if (pc.current) pc.current.close(); // 기존 연결이 있다면 닫기
     pc.current = new RTCPeerConnection({
@@ -137,6 +149,9 @@ export default function Room() {
         ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
         : await navigator.mediaDevices.getUserMedia({ video: isMobile ? { facingMode: cameraFacing } : true, audio: true });
 
+      // 통화 시작 시 음소거 상태 반영
+      stream.getAudioTracks().forEach(track => track.enabled = !muted);
+
       localStream.current = stream;
       if(localVideo.current) localVideo.current.srcObject = stream;
 
@@ -161,17 +176,18 @@ export default function Room() {
       stopLocalStream();
       initPeerConnection();
 
-      const arStream = arStreamRef.current;
+      const arStream = arStreamRef.current; // Video-only stream from canvas
       const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
-      const combinedStream = new MediaStream([
-        ...arStream.getVideoTracks(),
-        ...audioStream.getAudioTracks()
-      ]);
+      const audioTrack = audioStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !muted; // 현재 마이크 음소거 상태를 반영
+        arStream.addTrack(audioTrack);
+      }
 
-      localStream.current = combinedStream;
+      localStream.current = arStream; // Now arStream contains both video and audio
 
-      combinedStream.getTracks().forEach(track => pc.current.addTrack(track, combinedStream));
+      localStream.current.getTracks().forEach(track => pc.current.addTrack(track, localStream.current));
 
       const offer = await pc.current.createOffer();
       await pc.current.setLocalDescription(offer);
@@ -192,6 +208,10 @@ export default function Room() {
         video: isMobile ? { facingMode: cameraFacing } : true,
         audio: true
       });
+
+      // 통화 시작 시 음소거 상태 반영
+      stream.getAudioTracks().forEach(track => track.enabled = !muted);
+      
       localStream.current = stream;
       if(localVideo.current) localVideo.current.srcObject = stream;
       stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
@@ -207,12 +227,7 @@ export default function Room() {
   };
 
   const toggleMute = () => {
-    if (localStream.current) {
-      localStream.current.getAudioTracks().forEach(track => {
-        track.enabled = !track.enabled;
-      });
-      setMuted(!muted);
-    }
+    setMuted(prevMuted => !prevMuted);
   };
 
   const toggleFullScreen = () => {
@@ -250,7 +265,8 @@ export default function Room() {
 
   const toggleARMode = () => {
     const newArMode = !arMode;
-    // AR 모드 변경 시 스트림 및 연결 초기화
+    arCallStarted.current = false; // AR 통화 플래그 초기화
+
     stopLocalStream();
     if (pc.current) {
       pc.current.close();
@@ -258,13 +274,10 @@ export default function Room() {
     }
     
     setArMode(newArMode);
-    // 변경된 AR 상태를 상대방에게 알림
     socket.emit("ar-mode-change", { roomId: id, arMode: newArMode });
 
-    // 웹캠 모드로 돌아올 때, 자동으로 웹캠 통화 시작
     if (!newArMode) {
       startHostCall("webcam");
-      // MindAR UI 오버레이 제거
       const mindarContainer = document.querySelector(".mindar-ui-overlay");
       if (mindarContainer) {
         mindarContainer.remove();
