@@ -26,7 +26,8 @@ export default function Room() {
   const [joined, setJoined] = useState(false);
   const [muted, setMuted] = useState(false);
   const [pendingCall, setPendingCall] = useState(null);
-  const [peerClickCoords, setPeerClickCoords] = useState(null); // Peer 클릭 좌표
+  const [drawData, setDrawData] = useState(null);
+  const [peerClickCoords, setPeerClickCoords] = useState(null);
 
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [posX, setPosX] = useState(20);
@@ -48,8 +49,8 @@ export default function Room() {
   }, []);
 
   const memoizedARComponent = useMemo(() => {
-    return <ARComponent onStreamReady={handleArStreamReady} peerClickCoords={peerClickCoords} />;
-  }, [handleArStreamReady, peerClickCoords]);
+    return <ARComponent onStreamReady={handleArStreamReady} drawData={drawData} peerClickCoords={peerClickCoords} />;
+  }, [handleArStreamReady, drawData, peerClickCoords]);
 
 
   useEffect(() => {
@@ -70,24 +71,68 @@ export default function Room() {
     socket.emit("join-room", { roomId: id, password: "", nickname: "익명" });
   }, [id, socketId]);
 
+  // Peer의 그리기 및 클릭을 위한 이벤트 핸들러
   useEffect(() => {
-    const handleRemoteClick = (event) => {
-        const video = remoteVideo.current;
-        if (!video) return;
+    const videoEl = remoteVideo.current;
+    if (!isPeerInArMode || !videoEl) return;
 
-        const rect = video.getBoundingClientRect();
-        const x = (event.clientX - rect.left) / rect.width;
-        const y = (event.clientY - rect.top) / rect.height;
+    let isDrawing = false;
+    let hasDragged = false;
+    let lastSent = 0;
+    let startCoords = null;
 
-        if (x >= 0 && x <= 1 && y >= 0 && y <= 1) {
-            socket.emit('peer-click', { roomId: id, coords: { x, y } });
+    const getCoords = (e) => {
+        const rect = videoEl.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
+        return { x, y };
+    };
+
+    const handleMouseDown = (e) => {
+        isDrawing = true;
+        hasDragged = false;
+        startCoords = getCoords(e);
+    };
+
+    const handleMouseMove = (e) => {
+        if (!isDrawing) return;
+        
+        if (!hasDragged) {
+            // 처음 드래그 시작 시
+            hasDragged = true;
+            socket.emit('draw-start', { roomId: id, coords: startCoords });
+        }
+
+        const now = Date.now();
+        if (now - lastSent > 50) { // 50ms 쓰로틀링
+            const coords = getCoords(e);
+            socket.emit('draw-move', { roomId: id, coords });
+            lastSent = now;
         }
     };
 
-    const videoEl = remoteVideo.current;
-    if (isPeerInArMode && videoEl) {
-        videoEl.addEventListener('click', handleRemoteClick);
-        return () => videoEl.removeEventListener('click', handleRemoteClick);
+    const handleMouseUp = () => {
+        if (!isDrawing) return;
+        isDrawing = false;
+
+        if (hasDragged) {
+            socket.emit('draw-end', { roomId: id });
+        } else {
+            // 드래그 없이 클릭만 한 경우
+            socket.emit('peer-click', { roomId: id, coords: startCoords });
+        }
+    };
+
+    videoEl.addEventListener('mousedown', handleMouseDown);
+    videoEl.addEventListener('mousemove', handleMouseMove);
+    videoEl.addEventListener('mouseup', handleMouseUp);
+    videoEl.addEventListener('mouseleave', handleMouseUp);
+
+    return () => {
+        videoEl.removeEventListener('mousedown', handleMouseDown);
+        videoEl.removeEventListener('mousemove', handleMouseMove);
+        videoEl.removeEventListener('mouseup', handleMouseUp);
+        videoEl.removeEventListener('mouseleave', handleMouseUp);
     }
   }, [isPeerInArMode, id]);
 
@@ -121,10 +166,11 @@ export default function Room() {
         toast.info("상대방이 웹캠 모드로 전환했습니다.");
       }
     });
-    socket.on('place-object', ({ coords }) => {
-        toast.info("Peer가 오브젝트 생성을 요청했습니다.");
-        setPeerClickCoords(coords);
-    });
+    
+    socket.on('place-object', ({ coords }) => setPeerClickCoords(coords));
+    socket.on('draw-start', ({ coords }) => setDrawData({ state: 'start', coords }));
+    socket.on('draw-move', ({ coords }) => setDrawData({ state: 'move', coords }));
+    socket.on('draw-end', () => setDrawData({ state: 'end' }));
 
     return () => {
       socket.emit("leave-room", id);
@@ -136,6 +182,9 @@ export default function Room() {
       socket.off("signal");
       socket.off("peer-ar-mode-changed");
       socket.off("place-object");
+      socket.off("draw-start");
+      socket.off("draw-move");
+      socket.off("draw-end");
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, socketId]);
@@ -351,7 +400,7 @@ export default function Room() {
             {!arMode && <button onClick={() => startHostCall("webcam")} style={btnStyle}>웹캠</button>}
             {!arMode && <button onClick={() => startHostCall("screen")} style={btnStyle}>화면 공유</button>}
             
-            <button onClick={toggleMute} style={btnStyle}>{muted ? "마이크 켜기" : "마이크 끄기"}</button>
+            <button onClick={toggleMute} style={btnStyle}>{muted ? "마이크 끄기" : "마이크 끄기"}</button>
             <button onClick={toggleARMode} style={btnStyle}>{arMode ? "웹캠 전환" : "AR 전환"}</button>
             
             {isMobile && !arMode && (

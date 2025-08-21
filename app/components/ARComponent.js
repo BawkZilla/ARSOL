@@ -1,35 +1,50 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import * as THREE from 'three';
 
-const ARComponent = ({ onStreamReady, peerClickCoords }) => {
+// import * as THREE from 'three'; // 이 부분을 제거합니다.
+
+const ARComponent = ({ onStreamReady, drawData, peerClickCoords }) => {
   const sceneRef = useRef(null);
   const videoRef = useRef(null);
   const combinedCanvasRef = useRef(null);
+  const currentLineRef = useRef(null);
+
+  const get3DPoint = (coords) => {
+    const THREE = window.THREE;
+    if (!THREE) return null;
+
+    const sceneEl = sceneRef.current;
+    if (!sceneEl || !sceneEl.camera) return null;
+
+    const camera = sceneEl.camera;
+    const raycaster = new THREE.Raycaster();
+    const clickPoint = new THREE.Vector2(coords.x * 2 - 1, -(coords.y * 2 - 1));
+    
+    raycaster.setFromCamera(clickPoint, camera);
+
+    const targetPlanes = [];
+    sceneEl.querySelectorAll('.target-plane').forEach(planeEl => {
+        if (planeEl.object3D) targetPlanes.push(planeEl.object3D);
+    });
+
+    const intersects = raycaster.intersectObjects(targetPlanes, true);
+    if (intersects.length > 0) {
+        return intersects[0];
+    }
+    return null;
+  }
 
   useEffect(() => {
     const sceneEl = sceneRef.current;
-    if (!sceneEl) {
-      console.warn('ARComponent: sceneRef.current is null.');
-      return;
-    }
+    if (!sceneEl) return;
 
     let mindarSystem = null;
-
-    const startMindAR = () => {
-      mindarSystem = sceneEl.systems['mindar-image-system'];
-      if (mindarSystem) {
-        mindarSystem.start();
-      }
-    };
 
     const setupStream = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
+        if (videoRef.current) videoRef.current.srcObject = stream;
 
         const checkCanvas = () => {
           const arCanvas = sceneEl.canvas;
@@ -49,9 +64,7 @@ const ARComponent = ({ onStreamReady, peerClickCoords }) => {
               combinedCanvas.width = video.videoWidth;
               combinedCanvas.height = video.videoHeight;
               drawFrames();
-              if (onStreamReady) {
-                onStreamReady(combinedCanvas.captureStream());
-              }
+              if (onStreamReady) onStreamReady(combinedCanvas.captureStream());
             });
           } else {
             setTimeout(checkCanvas, 100);
@@ -59,11 +72,13 @@ const ARComponent = ({ onStreamReady, peerClickCoords }) => {
         };
 
         if (sceneEl.hasLoaded) {
-          startMindAR();
+          mindarSystem = sceneEl.systems['mindar-image-system'];
+          mindarSystem.start();
           checkCanvas();
         } else {
           sceneEl.addEventListener('loaded', () => {
-            startMindAR();
+            mindarSystem = sceneEl.systems['mindar-image-system'];
+            mindarSystem.start();
             checkCanvas();
           }, { once: true });
         }
@@ -74,44 +89,25 @@ const ARComponent = ({ onStreamReady, peerClickCoords }) => {
 
     setupStream();
 
-    const placeSphere = (position, parent) => {
-        const annotationSphere = document.createElement('a-sphere');
-        annotationSphere.setAttribute('radius', '0.05');
-        annotationSphere.setAttribute('color', '#4CC3D9');
-        annotationSphere.setAttribute('position', position);
-        parent.appendChild(annotationSphere);
-    }
-
     const handleClick = (event) => {
       const touchPoint = event.detail.intersection.point;
       const parentEntity = event.target.parentElement;
       const localPosition = parentEntity.object3D.worldToLocal(touchPoint.clone());
-      placeSphere(localPosition, parentEntity);
-    };
-
-    const handleTargetFound = (event) => {
-      const targetPlane = event.target.querySelector('.target-plane');
-      if (targetPlane) {
-        targetPlane.setAttribute('visible', 'true');
-      }
-    };
-
-    const handleTargetLost = (event) => {
-      const targetPlane = event.target.querySelector('.target-plane');
-      if (targetPlane) {
-        targetPlane.setAttribute('visible', 'false');
-      }
+      
+      const annotationSphere = document.createElement('a-sphere');
+      annotationSphere.setAttribute('radius', '0.05');
+      annotationSphere.setAttribute('color', '#4CC3D9');
+      annotationSphere.setAttribute('position', localPosition);
+      parentEntity.appendChild(annotationSphere);
     };
 
     const setupEventListeners = () => {
-      const targetEntities = sceneEl.querySelectorAll('[mindar-image-target]');
-      targetEntities.forEach(target => {
-        const plane = target.querySelector('.target-plane');
-        if (plane) {
-            plane.addEventListener('click', handleClick);
-        }
-        target.addEventListener('targetFound', handleTargetFound);
-        target.addEventListener('targetLost', handleTargetLost);
+      sceneEl.querySelectorAll('.target-plane').forEach(plane => {
+        plane.addEventListener('click', handleClick);
+      });
+      sceneEl.querySelectorAll('[mindar-image-target]').forEach(target => {
+        target.addEventListener('targetFound', () => target.querySelector('.target-plane').setAttribute('visible', 'true'));
+        target.addEventListener('targetLost', () => target.querySelector('.target-plane').setAttribute('visible', 'false'));
       });
     };
     
@@ -131,35 +127,14 @@ const ARComponent = ({ onStreamReady, peerClickCoords }) => {
     };
   }, [onStreamReady]);
 
+  // Peer의 클릭을 처리 (구 생성)
   useEffect(() => {
-    if (!peerClickCoords || !sceneRef.current || !sceneRef.current.hasLoaded) {
-        return;
-    }
+    if (!peerClickCoords) return;
+    const intersection = get3DPoint(peerClickCoords);
 
-    const sceneEl = sceneRef.current;
-    const camera = sceneEl.camera;
-    const raycaster = new THREE.Raycaster();
-
-    const clickPoint = new THREE.Vector2(
-        peerClickCoords.x * 2 - 1,
-        -(peerClickCoords.y * 2 - 1)
-    );
-    raycaster.setFromCamera(clickPoint, camera);
-
-    const targetPlanes = [];
-    sceneEl.querySelectorAll('.target-plane').forEach(planeEl => {
-        if (planeEl.object3D) {
-            targetPlanes.push(planeEl.object3D);
-        }
-    });
-    
-    const intersects = raycaster.intersectObjects(targetPlanes, true);
-
-    if (intersects.length > 0) {
-        const intersection = intersects[0];
-        const touchPoint = intersection.point;
+    if (intersection) {
         const parentEntity = intersection.object.el.parentElement;
-        const localPosition = parentEntity.object3D.worldToLocal(touchPoint.clone());
+        const localPosition = parentEntity.object3D.worldToLocal(intersection.point.clone());
 
         const peerSphere = document.createElement('a-sphere');
         peerSphere.setAttribute('radius', '0.05');
@@ -168,6 +143,59 @@ const ARComponent = ({ onStreamReady, peerClickCoords }) => {
         parentEntity.appendChild(peerSphere);
     }
   }, [peerClickCoords]);
+
+  // Peer의 그리기를 처리 (THREE.js 직접 사용 + setObject3D)
+  useEffect(() => {
+    const THREE = window.THREE;
+    if (!drawData || !THREE) return;
+
+    const { state, coords } = drawData;
+    const intersection = coords ? get3DPoint(coords) : null;
+
+    if (state === 'start' && intersection) {
+        const parentEntity = intersection.object.el.parentElement;
+        const startPoint = parentEntity.object3D.worldToLocal(intersection.point.clone());
+
+        const lineEntity = document.createElement('a-entity');
+        parentEntity.appendChild(lineEntity);
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([startPoint.x, startPoint.y, startPoint.z]), 3));
+        
+        const material = new THREE.LineBasicMaterial({ color: 0xff0000 });
+        const line = new THREE.Line(geometry, material);
+
+        lineEntity.setObject3D('mesh', line);
+
+        currentLineRef.current = {
+            line,
+            parent: parentEntity,
+            points: [startPoint]
+        };
+
+    } else if (state === 'move' && currentLineRef.current && intersection) {
+        const { line, parent, points } = currentLineRef.current;
+        
+        if (parent !== intersection.object.el.parentElement) return;
+
+        const nextPoint = parent.object3D.worldToLocal(intersection.point.clone());
+        points.push(nextPoint);
+
+        const positions = new Float32Array(points.length * 3);
+        points.forEach((p, i) => {
+            positions[i * 3] = p.x;
+            positions[i * 3 + 1] = p.y;
+            positions[i * 3 + 2] = p.z;
+        });
+
+        line.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        line.geometry.computeBoundingSphere();
+
+    } else if (state === 'end') {
+        currentLineRef.current = null;
+    }
+
+  }, [drawData]);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>

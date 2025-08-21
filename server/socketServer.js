@@ -52,7 +52,6 @@ io.on("connection", (socket) => {
 
         socket.join(roomId);
 
-        // emit 조금 늦게 해서 join-room socket.join 완료 후 broadcast
         setTimeout(() => {
             console.log(`Emitting room-users for ${roomId}`, JSON.stringify(room.users));
             io.to(roomId).emit("room-users", {
@@ -105,10 +104,22 @@ io.on("connection", (socket) => {
     socket.on('peer-click', ({ roomId, coords }) => {
         const room = rooms[roomId];
         if (room && room.hostId) {
-            // Forward the click coordinates to the host of the room
             io.to(room.hostId).emit('place-object', { coords });
         }
     });
+
+    const forwardToHost = (eventName) => {
+        socket.on(eventName, ({ roomId, ...rest }) => {
+            const room = rooms[roomId];
+            if (room && room.hostId) {
+                io.to(room.hostId).emit(eventName, rest);
+            }
+        });
+    };
+
+    forwardToHost('draw-start');
+    forwardToHost('draw-move');
+    forwardToHost('draw-end');
 
     socket.on("leave-room", (roomId) => handleLeave(socket, roomId));
 
