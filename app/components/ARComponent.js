@@ -4,7 +4,7 @@ import React, { useEffect, useRef } from 'react';
 
 // import * as THREE from 'three'; // 이 부분을 제거합니다.
 
-const ARComponent = ({ onStreamReady, drawData, peerClickCoords }) => {
+const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, peerTool, clearSelectedTool, clearPeerTool }) => {
   const sceneRef = useRef(null);
   const videoRef = useRef(null);
   const combinedCanvasRef = useRef(null);
@@ -90,15 +90,56 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords }) => {
     setupStream();
 
     const handleClick = (event) => {
+      const currentTool = selectedTool.current;
+      if (!currentTool){ 
+        console.log("tool not selected");
+        return;
+      } 
+
       const touchPoint = event.detail.intersection.point;
       const parentEntity = event.target.parentElement;
-      const localPosition = parentEntity.object3D.worldToLocal(touchPoint.clone());
+      const localPos = parentEntity.object3D.worldToLocal(touchPoint.clone());
       
-      const annotationSphere = document.createElement('a-sphere');
-      annotationSphere.setAttribute('radius', '0.05');
-      annotationSphere.setAttribute('color', '#4CC3D9');
-      annotationSphere.setAttribute('position', localPosition);
-      parentEntity.appendChild(annotationSphere);
+      switch (currentTool) {
+        case 'marker': {                   // 빨간 구
+          const sphere = document.createElement('a-sphere');
+          sphere.setAttribute('radius', '0.05');
+          sphere.setAttribute('color', 'blue');
+          sphere.setAttribute('position', localPos);
+          parent.appendChild(sphere);
+          break;
+        }
+        case 'text': {                     // 텍스트 입력 -> plane+text
+          const userText = prompt('텍스트를 입력하세요');
+          if (!userText) break;
+          const textPlane = document.createElement('a-plane');
+          textPlane.setAttribute('color', '#FFFFFF');
+          textPlane.setAttribute('height', '0.2');
+          textPlane.setAttribute('width', Math.max(userText.length * 0.1, 0.3));
+          textPlane.setAttribute('position', localPos);
+          const textEl = document.createElement('a-text');
+          textEl.setAttribute('value', userText);
+          textEl.setAttribute('align', 'center');
+          textEl.setAttribute('color', '#0008ffff');
+          textPlane.appendChild(textEl);
+          parent.appendChild(textPlane);
+          break;
+        }
+        case 'cpu':
+        case 'ram':
+        case 'gpu': {                      // glTF 불러오기
+          const model = document.createElement('a-entity');
+          model.setAttribute('gltf-model', `url(/models/${currentTool}.gltf)`);
+          model.setAttribute('scale', '0.2 0.2 0.2');
+          model.setAttribute('position', localPos);
+          parent.appendChild(model);
+          break;
+        }
+        default:
+          break;
+      }
+      console.log(currentTool ," 배치 완료(host)");
+      clearSelectedTool();
     };
 
     const setupEventListeners = () => {
@@ -133,14 +174,56 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords }) => {
     const intersection = get3DPoint(peerClickCoords);
 
     if (intersection) {
-        const parentEntity = intersection.object.el.parentElement;
-        const localPosition = parentEntity.object3D.worldToLocal(intersection.point.clone());
 
-        const peerSphere = document.createElement('a-sphere');
-        peerSphere.setAttribute('radius', '0.05');
-        peerSphere.setAttribute('color', '#FF0000'); // Peer's sphere is red
-        peerSphere.setAttribute('position', localPosition);
-        parentEntity.appendChild(peerSphere);
+        const currentTool = peerTool;
+        const parentEntity = intersection.object.el.parentElement;
+        const localPos = parentEntity.object3D.worldToLocal(intersection.point.clone());
+        if (!currentTool){ 
+          console.log("tool not selected");
+          return;
+        } 
+
+
+        switch (currentTool) {
+        case 'marker': {                   // 빨간 구
+          const sphere = document.createElement('a-sphere');
+          sphere.setAttribute('radius', '0.05');
+          sphere.setAttribute('color', 'red');
+          sphere.setAttribute('position', localPos);
+          parent.appendChild(sphere);
+          break;
+        }
+        case 'text': {                     // 텍스트 입력 -> plane+text
+          const userText = prompt('텍스트를 입력하세요');
+          if (!userText) break;
+          const textPlane = document.createElement('a-plane');
+          textPlane.setAttribute('color', '#FFFFFF');
+          textPlane.setAttribute('height', '0.2');
+          textPlane.setAttribute('width', Math.max(userText.length * 0.1, 0.3));
+          textPlane.setAttribute('position', localPos);
+          const textEl = document.createElement('a-text');
+          textEl.setAttribute('value', userText);
+          textEl.setAttribute('align', 'center');
+          textEl.setAttribute('color', '#ff0000ff');
+          textPlane.appendChild(textEl);
+          parent.appendChild(textPlane);
+          break;
+        }
+        case 'cpu':
+        case 'ram':
+        case 'gpu': {                      // glTF 불러오기
+          const model = document.createElement('a-entity');
+          model.setAttribute('gltf-model', `url(/models/${currentTool}.gltf)`);
+          model.setAttribute('scale', '0.2 0.2 0.2');
+          model.setAttribute('position', localPos);
+          parent.appendChild(model);
+          break;
+        }
+        default:
+          break;
+      }
+      console.log(currentTool ," 배치 완료(peer)");
+      clearPeerTool();
     }
   }, [peerClickCoords]);
 
