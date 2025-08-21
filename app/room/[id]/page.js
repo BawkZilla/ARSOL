@@ -20,12 +20,13 @@ export default function Room() {
   const pc = useRef();
   const localStream = useRef();
   const arStreamRef = useRef(null);
-  const arCallStarted = useRef(false); // AR 통화 시작 여부 플래그
+  const arCallStarted = useRef(false);
 
   const [socketId, setSocketId] = useState(null);
   const [joined, setJoined] = useState(false);
   const [muted, setMuted] = useState(false);
   const [pendingCall, setPendingCall] = useState(null);
+  const [peerClickCoords, setPeerClickCoords] = useState(null); // Peer 클릭 좌표
 
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [posX, setPosX] = useState(20);
@@ -35,21 +36,20 @@ export default function Room() {
 
   const [isMobile, setIsMobile] = useState(false);
   const [cameraFacing, setCameraFacing] = useState("environment");
-  const [arMode, setArMode] = useState(false); // 내 AR 모드 상태
-  const [isPeerInArMode, setIsPeerInArMode] = useState(false); // 상대방 AR 모드 상태
+  const [arMode, setArMode] = useState(false);
+  const [isPeerInArMode, setIsPeerInArMode] = useState(false);
 
-  // ARComponent로부터 stream이 준비되면 호출될 콜백
   const handleArStreamReady = useCallback((stream) => {
-    if (arCallStarted.current) return; // 이미 통화가 시작되었으면 중복 실행 방지
+    if (arCallStarted.current) return;
     arStreamRef.current = stream;
     toast.success("AR 씬 준비 완료! 자동으로 공유를 시작합니다.");
     startArCall();
-    arCallStarted.current = true; // 통화 시작 플래그 설정
+    arCallStarted.current = true;
   }, []);
 
   const memoizedARComponent = useMemo(() => {
-    return <ARComponent onStreamReady={handleArStreamReady} />;
-  }, [handleArStreamReady]);
+    return <ARComponent onStreamReady={handleArStreamReady} peerClickCoords={peerClickCoords} />;
+  }, [handleArStreamReady, peerClickCoords]);
 
 
   useEffect(() => {
@@ -69,6 +69,27 @@ export default function Room() {
     if (!id || !socketId) return;
     socket.emit("join-room", { roomId: id, password: "", nickname: "익명" });
   }, [id, socketId]);
+
+  useEffect(() => {
+    const handleRemoteClick = (event) => {
+        const video = remoteVideo.current;
+        if (!video) return;
+
+        const rect = video.getBoundingClientRect();
+        const x = (event.clientX - rect.left) / rect.width;
+        const y = (event.clientY - rect.top) / rect.height;
+
+        if (x >= 0 && x <= 1 && y >= 0 && y <= 1) {
+            socket.emit('peer-click', { roomId: id, coords: { x, y } });
+        }
+    };
+
+    const videoEl = remoteVideo.current;
+    if (isPeerInArMode && videoEl) {
+        videoEl.addEventListener('click', handleRemoteClick);
+        return () => videoEl.removeEventListener('click', handleRemoteClick);
+    }
+  }, [isPeerInArMode, id]);
 
   useEffect(() => {
     socket.on("room-users", ({ users }) => setJoined(users.length >= 2));
@@ -92,7 +113,6 @@ export default function Room() {
       else if (data.type === "answer") await pc.current.setRemoteDescription(new RTCSessionDescription(data));
       else if (data.candidate) await pc.current.addIceCandidate(new RTCIceCandidate(data));
     });
-    // 상대방의 AR 모드 변경을 감지
     socket.on("peer-ar-mode-changed", ({ arMode: peerArStatus }) => {
       setIsPeerInArMode(peerArStatus);
       if (peerArStatus) {
@@ -100,6 +120,10 @@ export default function Room() {
       } else {
         toast.info("상대방이 웹캠 모드로 전환했습니다.");
       }
+    });
+    socket.on('place-object', ({ coords }) => {
+        toast.info("Peer가 오브젝트 생성을 요청했습니다.");
+        setPeerClickCoords(coords);
     });
 
     return () => {
@@ -111,11 +135,11 @@ export default function Room() {
       socket.off("room-closed");
       socket.off("signal");
       socket.off("peer-ar-mode-changed");
+      socket.off("place-object");
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, socketId]);
 
-  // 마이크 음소거 상태가 변경될 때마다 스트림에 즉시 반영
   useEffect(() => {
     if (localStream.current) {
       localStream.current.getAudioTracks().forEach(track => {
@@ -125,7 +149,7 @@ export default function Room() {
   }, [muted]);
 
   const initPeerConnection = () => {
-    if (pc.current) pc.current.close(); // 기존 연결이 있다면 닫기
+    if (pc.current) pc.current.close();
     pc.current = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
@@ -147,14 +171,13 @@ export default function Room() {
 
   const startHostCall = async (mode = "webcam") => {
     try {
-      stopLocalStream(); // 기존 스트림 정리
+      stopLocalStream();
       initPeerConnection();
 
       const stream = mode === "screen"
         ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
         : await navigator.mediaDevices.getUserMedia({ video: isMobile ? { facingMode: cameraFacing } : true, audio: true });
 
-      // 통화 시작 시 음소거 상태 반영
       stream.getAudioTracks().forEach(track => track.enabled = !muted);
 
       localStream.current = stream;
@@ -181,16 +204,16 @@ export default function Room() {
       stopLocalStream();
       initPeerConnection();
 
-      const arStream = arStreamRef.current; // Video-only stream from canvas
+      const arStream = arStreamRef.current;
       const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
       const audioTrack = audioStream.getAudioTracks()[0];
       if (audioTrack) {
-        audioTrack.enabled = !muted; // 현재 마이크 음소거 상태를 반영
+        audioTrack.enabled = !muted;
         arStream.addTrack(audioTrack);
       }
 
-      localStream.current = arStream; // Now arStream contains both video and audio
+      localStream.current = arStream;
 
       localStream.current.getTracks().forEach(track => pc.current.addTrack(track, localStream.current));
 
@@ -214,7 +237,6 @@ export default function Room() {
         audio: true
       });
 
-      // 통화 시작 시 음소거 상태 반영
       stream.getAudioTracks().forEach(track => track.enabled = !muted);
       
       localStream.current = stream;
@@ -242,7 +264,7 @@ export default function Room() {
   };
 
   const startDrag = (e) => {
-    if (isFullScreen || arMode) return; // AR 모드에서는 드래그 방지
+    if (isFullScreen || arMode) return;
     setDragging(true);
     offset.current = { x: e.clientX - posX, y: e.clientY - posY };
     window.addEventListener("mousemove", onDrag);
@@ -270,7 +292,7 @@ export default function Room() {
 
   const toggleARMode = () => {
     const newArMode = !arMode;
-    arCallStarted.current = false; // AR 통화 플래그 초기화
+    arCallStarted.current = false;
 
     stopLocalStream();
     if (pc.current) {
@@ -294,17 +316,15 @@ export default function Room() {
     <div style={{ position: "relative", width: "100%", height: "100vh", background: "#121212" }}>
       <ToastContainer position="top-center" />
 
-      {/* --- 메인 비디오 영역 --- */}
       <div style={{ position: 'absolute', width: '100%', height: '100%' }}>
         {arMode ? (
           memoizedARComponent
         ) : (
-          <video ref={remoteVideo} autoPlay style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <video ref={remoteVideo} autoPlay style={{ width: "100%", height: "100%", objectFit: "cover", cursor: isPeerInArMode ? 'crosshair' : 'default' }} />
         )}
       </div>
       <audio ref={remoteAudio} autoPlay />
 
-      {/* --- 로컬 비디오 영역 --- */}
       {!arMode && (
         <div onClick={toggleFullScreen} onMouseDown={startDrag} style={{
           position: "absolute",

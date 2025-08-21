@@ -102,6 +102,14 @@ io.on("connection", (socket) => {
         socket.to(roomId).emit("peer-ar-mode-changed", { arMode });
     });
 
+    socket.on('peer-click', ({ roomId, coords }) => {
+        const room = rooms[roomId];
+        if (room && room.hostId) {
+            // Forward the click coordinates to the host of the room
+            io.to(room.hostId).emit('place-object', { coords });
+        }
+    });
+
     socket.on("leave-room", (roomId) => handleLeave(socket, roomId));
 
     socket.on("disconnect", () => {
