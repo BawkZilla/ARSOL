@@ -43,6 +43,7 @@ export default function Room() {
   const [cameraFacing, setCameraFacing] = useState("environment");
   const [arMode, setArMode] = useState(false);
   const [isPeerInArMode, setIsPeerInArMode] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const handleArStreamReady = useCallback((stream) => {
     if (arCallStarted.current) return;
