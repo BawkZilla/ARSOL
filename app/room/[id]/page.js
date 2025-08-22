@@ -22,7 +22,8 @@ export default function Room() {
   const arStreamRef = useRef(null);
   const arCallStarted = useRef(false);
   const selectedToolRef = useRef(null);
-  const [textValue, setTextValue] = useState(null);
+  const peerToolRef = useRef(null);
+  const textValueRef = useRef(null);
   
 
   const [socketId, setSocketId] = useState(null);
@@ -31,7 +32,6 @@ export default function Room() {
   const [pendingCall, setPendingCall] = useState(null);
   const [drawData, setDrawData] = useState(null);
   const [peerClickCoords, setPeerClickCoords] = useState(null);
-  const [peerTool, setPeerTool] = useState(null);
 
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [posX, setPosX] = useState(20);
@@ -61,17 +61,17 @@ export default function Room() {
     drawData={drawData} 
     peerClickCoords={peerClickCoords} 
     selectedTool={selectedToolRef}
-    peerTool={peerTool}
-    textValue={textValue}
+    peerTool={peerToolRef}
+    textValue={textValueRef}
     clearSelectedTool={() => {
       selectedToolRef.current = null;
     }}
     clearPeerTool={() => {
-      setPeerTool(null);
-      setTextValue(null);
+      peerToolRef.current = null;
+      textValueRef.current = null;
     }}
      />;
-  }, [handleArStreamReady, drawData, peerClickCoords, peerTool, textValue]);
+  }, [handleArStreamReady, drawData, peerClickCoords]);
 
   const onDrawerItemClick = (tool) => {
     if(arMode) selectedToolRef.current = tool;
@@ -153,7 +153,9 @@ export default function Room() {
             socket.emit('draw-end', { roomId: id });
         } else {
             // 드래그 없이 클릭만 한 경우 
+            console.log("X");
             if(isDrawerSelected){ // 주석 선택 시에만 클릭 시 동작 - EDITED BY 강유승
+              console.log("클릭 실행");
               socket.emit('peer-click', { roomId: id, coords: startCoords });
               changeSelected(false);
             }
@@ -205,9 +207,11 @@ export default function Room() {
     });
     
     socket.on('tool-select', ({ tool, text }) => {
-      setPeerTool(tool);
-      setTextValue(text);
+      peerToolRef.current = tool;
+      textValueRef = text;
+      console.log("주석 종류: ", peerToolRef, " 텍스트: ", textValueRef);
     });
+
     socket.on('place-object', ({ coords }) => setPeerClickCoords(coords));
     socket.on('draw-start', ({ coords }) => setDrawData({ state: 'start', coords }));
     socket.on('draw-move', ({ coords }) => setDrawData({ state: 'move', coords }));

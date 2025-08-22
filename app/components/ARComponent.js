@@ -172,10 +172,11 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
   useEffect(() => {
     if (!peerClickCoords) return;
     const intersection = get3DPoint(peerClickCoords);
+    console.log("got coords");
 
     if (intersection) {
 
-        const currentTool = peerTool;
+        const currentTool = peerTool.current;
         const parent = intersection.object.el.parentElement;
         const localPos = parent.object3D.worldToLocal(intersection.point.clone());
         if (!currentTool){ 
@@ -194,7 +195,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           break;
         }
         case 'text': {                     // 텍스트 입력 -> plane+text
-          const userText = textValue;
+          const userText = textValue.current;
           if (!userText) break;
           const textPlane = document.createElement('a-plane');
           textPlane.setAttribute('color', '#FFFFFF');
