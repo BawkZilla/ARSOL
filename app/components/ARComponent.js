@@ -1,6 +1,5 @@
 'use client';
 
-import { text } from 'express';
 import React, { useEffect, useRef } from 'react';
 
 // import * as THREE from 'three'; // 이 부분을 제거합니다.
