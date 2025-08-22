@@ -44,7 +44,6 @@ export default function Room() {
   const [arMode, setArMode] = useState(false);
   const [isPeerInArMode, setIsPeerInArMode] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [showObjectDetail, setShowObjectDetail] = useState(false); // drawer 내 3D 오브젝트 영역 세부요소 토글
 
   const handleArStreamReady = useCallback((stream) => {
     if (arCallStarted.current) return;
