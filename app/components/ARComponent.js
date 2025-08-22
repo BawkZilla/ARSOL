@@ -1,5 +1,6 @@
 'use client';
 
+import { text } from 'express';
 import React, { useEffect, useRef } from 'react';
 
 // import * as THREE from 'three'; // 이 부분을 제거합니다.
@@ -225,7 +226,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
       console.log(currentTool ," 배치 완료(peer)");
       clearPeerTool();
     }
-  }, [peerClickCoords]);
+  }, [peerClickCoords, textValue]);
 
   // Peer의 그리기를 처리 (THREE.js 직접 사용 + setObject3D)
   useEffect(() => {

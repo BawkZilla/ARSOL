@@ -68,19 +68,21 @@ export default function Room() {
     }}
     clearPeerTool={() => {
       setPeerTool(null);
+      setTextValue(null);
     }}
      />;
   }, [handleArStreamReady, drawData, peerClickCoords, peerTool, textValue]);
 
   const onDrawerItemClick = (tool) => {
-    if(isPeerInArMode){
+    if(arMode) selectedToolRef.current = tool;
+    else if(isPeerInArMode){
       changeSelected(true);
-      const textV = null;
+      let textV = null;
       if(tool == 'text')
         textV = prompt('텍스트를 입력하세요');
       socket.emit("peer-select", { roomId: id, tool: tool, text: textV });
     }
-    else if(arMode) selectedToolRef.current = tool; 
+     
     toast.info(`${tool} 배치 모드입니다. AR 화면을 터치하세요.`);
   };
 
