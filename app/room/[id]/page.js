@@ -38,7 +38,6 @@ export default function Room() {
   const [posY, setPosY] = useState(20);
   const [dragging, setDragging] = useState(false);
   const offset = useRef({ x: 0, y: 0 });
-  const [isDrawerSelected, changeSelected] = useState(false);
 
   const [isMobile, setIsMobile] = useState(false);
   const [cameraFacing, setCameraFacing] = useState("environment");
@@ -73,18 +72,7 @@ export default function Room() {
      />;
   }, [handleArStreamReady, drawData, peerClickCoords]);
 
-  const onDrawerItemClick = (tool) => {
-    if(arMode) selectedToolRef.current = tool;
-    else if(isPeerInArMode){
-      changeSelected(true);
-      let textV = null;
-      if(tool == 'text')
-        textV = prompt('텍스트를 입력하세요');
-      socket.emit("peer-select", { roomId: id, tool: tool, text: textV });
-    }
-     
-    toast.info(`${tool} 배치 모드입니다. AR 화면을 터치하세요.`);
-  };
+  
 
 
   useEffect(() => {
@@ -153,12 +141,9 @@ export default function Room() {
             socket.emit('draw-end', { roomId: id });
         } else {
             // 드래그 없이 클릭만 한 경우 
-            console.log("X");
-            if(isDrawerSelected){ // 주석 선택 시에만 클릭 시 동작 - EDITED BY 강유승
-              console.log("클릭 실행");
-              socket.emit('peer-click', { roomId: id, coords: startCoords });
-              changeSelected(false);
-            }
+
+            socket.emit('peer-click', { roomId: id, coords: startCoords });
+            
         }
     };
 
@@ -174,6 +159,18 @@ export default function Room() {
         videoEl.removeEventListener('mouseleave', handleMouseUp);
     }
   }, [isPeerInArMode, id]);
+
+  const onDrawerItemClick = (tool) => {
+    if(arMode) selectedToolRef.current = tool;
+    else if(isPeerInArMode){
+      let textV = null;
+      if(tool == 'text')
+        textV = prompt('텍스트를 입력하세요');
+      socket.emit("peer-select", { roomId: id, tool: tool, text: textV });
+    }
+     
+    toast.info(`${tool} 배치 모드입니다. AR 화면을 터치하세요.`);
+  };
 
   useEffect(() => {
     socket.on("room-users", ({ users }) => setJoined(users.length >= 2));
@@ -208,7 +205,7 @@ export default function Room() {
     
     socket.on('tool-select', ({ tool, text }) => {
       peerToolRef.current = tool;
-      textValueRef = text;
+      textValueRef.current = text;
       console.log("주석 종류: ", peerToolRef, " 텍스트: ", textValueRef);
     });
 
@@ -449,7 +446,7 @@ export default function Room() {
             {!arMode && <button onClick={() => startHostCall("screen")} style={btnStyle}>화면 공유</button>}
             
             <button onClick={toggleMute} style={btnStyle}>{muted ? "마이크 끄기" : "마이크 끄기"}</button>
-            <button onClick={toggleARMode} style={btnStyle}>{arMode ? "웹캠 전환" : "AR 전환"}</button>
+            {!isPeerInArMode && <button onClick={toggleARMode} style={btnStyle}>{arMode ? "웹캠 전환" : "AR 전환"}</button>}
             {(arMode || isPeerInArMode) && <button onClick={controlCommentsDrawer} style={btnStyle}>{isDrawerOpen ? "탭 닫기" : "주석 추가"}</button>}
 
             {isMobile && !arMode && (

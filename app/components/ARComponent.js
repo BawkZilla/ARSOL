@@ -196,6 +196,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
         }
         case 'text': {                     // 텍스트 입력 -> plane+text
           const userText = textValue.current;
+          console.log("peer text: ", userText);
           if (!userText) break;
           const textPlane = document.createElement('a-plane');
           textPlane.setAttribute('color', '#FFFFFF');
@@ -205,7 +206,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           const textEl = document.createElement('a-text');
           textEl.setAttribute('value', userText);
           textEl.setAttribute('align', 'center');
-          textEl.setAttribute('color', '#ff0000ff');
+          textEl.setAttribute('color', 'red');
           textPlane.appendChild(textEl);
           parent.appendChild(textPlane);
           break;
