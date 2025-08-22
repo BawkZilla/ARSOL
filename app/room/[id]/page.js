@@ -21,6 +21,9 @@ export default function Room() {
   const localStream = useRef();
   const arStreamRef = useRef(null);
   const arCallStarted = useRef(false);
+  const selectedToolRef = useRef(null);
+  const [textValue, setTextValue] = useState(null);
+  
 
   const [socketId, setSocketId] = useState(null);
   const [joined, setJoined] = useState(false);
@@ -28,17 +31,21 @@ export default function Room() {
   const [pendingCall, setPendingCall] = useState(null);
   const [drawData, setDrawData] = useState(null);
   const [peerClickCoords, setPeerClickCoords] = useState(null);
+  const [peerTool, setPeerTool] = useState(null);
 
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [posX, setPosX] = useState(20);
   const [posY, setPosY] = useState(20);
   const [dragging, setDragging] = useState(false);
   const offset = useRef({ x: 0, y: 0 });
+  const [isDrawerSelected, changeSelected] = useState(false);
 
   const [isMobile, setIsMobile] = useState(false);
   const [cameraFacing, setCameraFacing] = useState("environment");
   const [arMode, setArMode] = useState(false);
   const [isPeerInArMode, setIsPeerInArMode] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [showObjectDetail, setShowObjectDetail] = useState(false); // drawer 내 3D 오브젝트 영역 세부요소 토글
 
   const handleArStreamReady = useCallback((stream) => {
     if (arCallStarted.current) return;
@@ -49,8 +56,33 @@ export default function Room() {
   }, []);
 
   const memoizedARComponent = useMemo(() => {
-    return <ARComponent onStreamReady={handleArStreamReady} drawData={drawData} peerClickCoords={peerClickCoords} />;
-  }, [handleArStreamReady, drawData, peerClickCoords]);
+    return <ARComponent 
+    onStreamReady={handleArStreamReady} 
+    drawData={drawData} 
+    peerClickCoords={peerClickCoords} 
+    selectedTool={selectedToolRef}
+    peerTool={peerTool}
+    textValue={textValue}
+    clearSelectedTool={() => {
+      selectedToolRef.current = null;
+    }}
+    clearPeerTool={() => {
+      setPeerTool(null);
+    }}
+     />;
+  }, [handleArStreamReady, drawData, peerClickCoords, peerTool, textValue]);
+
+  const onDrawerItemClick = (tool) => {
+    if(isPeerInArMode){
+      changeSelected(true);
+      const textV = null;
+      if(tool == 'text')
+        textV = prompt('텍스트를 입력하세요');
+      socket.emit("peer-select", { roomId: id, tool: tool, text: textV });
+    }
+    else if(arMode) selectedToolRef.current = tool; 
+    toast.info(`${tool} 배치 모드입니다. AR 화면을 터치하세요.`);
+  };
 
 
   useEffect(() => {
@@ -118,8 +150,11 @@ export default function Room() {
         if (hasDragged) {
             socket.emit('draw-end', { roomId: id });
         } else {
-            // 드래그 없이 클릭만 한 경우
-            socket.emit('peer-click', { roomId: id, coords: startCoords });
+            // 드래그 없이 클릭만 한 경우 
+            if(isDrawerSelected){ // 주석 선택 시에만 클릭 시 동작 - EDITED BY 강유승
+              socket.emit('peer-click', { roomId: id, coords: startCoords });
+              changeSelected(false);
+            }
         }
     };
 
@@ -167,6 +202,10 @@ export default function Room() {
       }
     });
     
+    socket.on('tool-select', ({ tool, text }) => {
+      setPeerTool(tool);
+      setTextValue(text);
+    });
     socket.on('place-object', ({ coords }) => setPeerClickCoords(coords));
     socket.on('draw-start', ({ coords }) => setDrawData({ state: 'start', coords }));
     socket.on('draw-move', ({ coords }) => setDrawData({ state: 'move', coords }));
@@ -181,6 +220,7 @@ export default function Room() {
       socket.off("room-closed");
       socket.off("signal");
       socket.off("peer-ar-mode-changed");
+      socket.off("tool-select");
       socket.off("place-object");
       socket.off("draw-start");
       socket.off("draw-move");
@@ -361,6 +401,8 @@ export default function Room() {
     }
   };
 
+  const controlCommentsDrawer = () => setIsDrawerOpen(prev => !prev);
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh", background: "#121212" }}>
       <ToastContainer position="top-center" />
@@ -402,7 +444,8 @@ export default function Room() {
             
             <button onClick={toggleMute} style={btnStyle}>{muted ? "마이크 끄기" : "마이크 끄기"}</button>
             <button onClick={toggleARMode} style={btnStyle}>{arMode ? "웹캠 전환" : "AR 전환"}</button>
-            
+            {(arMode || isPeerInArMode) && <button onClick={controlCommentsDrawer} style={btnStyle}>{isDrawerOpen ? "탭 닫기" : "주석 추가"}</button>}
+
             {isMobile && !arMode && (
               <>
                 <button onClick={() => setCameraFacing("user")} style={btnStyle}>전면</button>
@@ -412,6 +455,47 @@ export default function Room() {
           </>
         )}
       </div>
+      {(arMode || isPeerInArMode) && isDrawerOpen && (
+        <div style={{
+          position:"absolute",
+          top:0,
+          right: isDrawerOpen ? 0 : "-240px",
+          width:"240px",
+          height:"100%",
+          transition:"right .3s",
+          background:"#1e1e1e",
+          color:"#eee",
+          boxShadow:"-2px 0 6px rgba(0,0,0,.6)",
+          zIndex:30,
+          padding:"16px",
+          overflowY:"auto"
+        }}>
+          <h3 style={{margin:"0 0 12px"}}>주석 도구</h3>
+
+          <button style={drawerBtnStyle} onClick={() => onDrawerItemClick('marker')}>
+            📍 마커
+          </button>
+
+          <button style={drawerBtnStyle} onClick={() => onDrawerItemClick('text')}>
+            📝 텍스트
+          </button>
+
+          <button
+            style={drawerBtnStyle}
+            onClick={() => setShowObjectDetail(prev => !prev)}
+          >
+            🧊 3D 오브젝트
+          </button>
+
+          {showObjectDetail && (
+            <div style={{marginLeft:"12px", marginTop:"8px", display:"flex", flexDirection:"column", gap:"6px"}}>
+              <button style={subBtnStyle} onClick={() => onDrawerItemClick('cpu')}>CPU</button>
+              <button style={subBtnStyle} onClick={() => onDrawerItemClick('ram')}>RAM</button>
+              <button style={subBtnStyle} onClick={() => onDrawerItemClick('gpu')}>GPU</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {pendingCall && (
         <div style={{
@@ -430,4 +514,21 @@ export default function Room() {
 const btnStyle = {
   padding: "8px 12px", background: "#1e1e1e", color: "#eee", border: "none",
   borderRadius: "8px", boxShadow: "0 2px 6px rgba(0,0,0,0.4)", cursor: "pointer", transition: "0.3s"
+};
+
+const drawerBtnStyle = {
+  width:"100%",
+  padding:"10px",
+  marginBottom:"8px",
+  textAlign:"left",
+  background:"#2b2b2b",
+  color:"#eee",
+  border:"none",
+  borderRadius:"6px",
+  cursor:"pointer"
+};
+const subBtnStyle = {
+  ...drawerBtnStyle,
+  background:"#3a3a3a",
+  fontSize:"0.9rem"
 };

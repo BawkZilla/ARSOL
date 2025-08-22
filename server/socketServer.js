@@ -108,6 +108,13 @@ io.on("connection", (socket) => {
         }
     });
 
+    socket.on('peer-select',({ roomId, tool, text }) => {
+        const room = rooms[roomId];
+        if (room && room.hostId) {
+            io.to(room.hostId).emit('tool-select', { tool, text });
+        }
+    });
+
     const forwardToHost = (eventName) => {
         socket.on(eventName, ({ roomId, ...rest }) => {
             const room = rooms[roomId];
