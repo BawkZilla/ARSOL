@@ -128,7 +128,14 @@ io.on("connection", (socket) => {
     forwardToHost('draw-move');
     forwardToHost('draw-end');
 
-    socket.on("leave-room", (roomId) => handleLeave(socket, roomId));
+    socket.on("leave-room", (roomId) => {
+        handleLeave(socket, roomId)        
+    });
+
+    socket.on("delete-room", (roomId) => {
+        console.log(`Host disconnected, closing room ${roomId}`);
+        delete rooms[roomId];
+    });
 
     socket.on("disconnect", () => {
         console.log(`Disconnected: ${socket.id}`);
@@ -153,6 +160,7 @@ io.on("connection", (socket) => {
                 users: room.users,
                 host: room.hostId
             });
+            io.to(roomId).emit("peer-disconnected");
             if (room.users.length === 0) delete rooms[roomId];
         }
     }

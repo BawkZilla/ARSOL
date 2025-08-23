@@ -5,6 +5,8 @@ import { socket } from "../../../lib/socket";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import dynamic from "next/dynamic";
+import { app }               from "@/lib/firebase";  
+import { getDatabase, ref, get, set } from "firebase/database";
 
 const ARComponent = dynamic(
   () => import("../../components/ARComponent"),
@@ -24,8 +26,10 @@ export default function Room() {
   const selectedToolRef = useRef(null);
   const peerToolRef = useRef(null);
   const textValueRef = useRef(null);
+  const db = getDatabase(app);  
   
-
+  const [currentUser, setCurrentUser] = useState(null);
+  const [userJob, setUserJob] = useState(null);
   const [socketId, setSocketId] = useState(null);
   const [joined, setJoined] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -87,6 +91,18 @@ export default function Room() {
     socket.on("connect", () => setSocketId(socket.id));
     return () => socket.off("connect");
   }, []);
+
+  useEffect(() => {
+    setCurrentUser(localStorage.getItem("nickname"));
+  }, []);
+
+  useEffect(()=> {
+    const fetchJob = async () => {
+      const snapshot = await get(ref(db, `users/${currentUser}/job`));
+      setUserJob(snapshot.val());
+    }
+    fetchJob();
+  }, [currentUser]);
 
   useEffect(() => {
     if (!id || !socketId) return;
@@ -173,8 +189,20 @@ export default function Room() {
   };
 
   useEffect(() => {
+    const userJob = null;
+    const currentUser = localStorage.getItem("nickname");
+    const fetchJob = async () => {
+      const snapshot = await get(ref(db, `users/${currentUser}/job`));
+      userJob = snapshot.val();
+    }
+    fetchJob();
+    
     socket.on("room-users", ({ users }) => setJoined(users.length >= 2));
     socket.on("ask-call-permission", ({ expertNickname }) => setPendingCall(expertNickname));
+    socket.on("peer-disconnected", () => {
+      if(userJob === "사용자")
+        toast.info("상대방이 방을 나갔습니다. 다른 전문가를 기다리세요");
+    });
     socket.on("call-permission-result", ({ allow }) => {
       if (!allow) {
         toast.error("방장이 통화를 거부했습니다.");
@@ -186,8 +214,10 @@ export default function Room() {
       setTimeout(() => router.push("/rooms"), 2000);
     });
     socket.on("room-closed", () => {
-      toast.error("방장이 방을 닫았습니다.");
-      setTimeout(() => router.push("/rooms"), 2000);
+      toast.info("방장이 방을 닫았습니다.");
+      console.log("방 닫힘", userJob);
+      if(userJob === "전문가")
+        setTimeout(() => router.push("/rooms"), 2000);
     });
     socket.on("signal", async ({ data }) => {
       if (data.type === "offer") await handlePeerOffer(data);
@@ -215,7 +245,7 @@ export default function Room() {
     socket.on('draw-end', () => setDrawData({ state: 'end' }));
 
     return () => {
-      socket.emit("leave-room", id);
+      //leave-room은 leaveRoom() 함수에서 버튼 클릭 시에만 처리하도록 변경- FIXED BY 강유승
       socket.off("room-users");
       socket.off("ask-call-permission");
       socket.off("call-permission-result");
@@ -239,6 +269,14 @@ export default function Room() {
       });
     }
   }, [muted]);
+
+  const leaveRoom = () =>{
+    socket.emit("leave-room", id);
+    if(userJob == "전문가")
+      router.push("/rooms");
+    else
+      router.push("/reviewpage");
+  }
 
   const initPeerConnection = () => {
     if (pc.current) pc.current.close();
@@ -455,8 +493,10 @@ export default function Room() {
                 <button onClick={() => setCameraFacing("environment")} style={btnStyle}>후면</button>
               </>
             )}
+            <button onClick={()=> leaveRoom() } style={{...btnStyle, background: "#872c2cff"}}>통화 종료</button>
           </>
         )}
+        {!joined && <button onClick={()=> {socket.emit("delete-room", id); router.push("/rooms");} } style={{...btnStyle, background: "#872c2cff"}}>방 닫기</button>}
       </div>
       {(arMode || isPeerInArMode) && isDrawerOpen && (
         <div style={{
@@ -506,7 +546,7 @@ export default function Room() {
           background: "#1e1e1e", color: "#eee", padding: "20px", borderRadius: "8px", zIndex: 30
         }}>
           <div style={{ marginBottom: "10px" }}>{pendingCall} 님과 통화를 시작하시겠습니까?</div>
-          <button onClick={() => { startHostCall(); socket.emit("allow-call", { roomId: id, allow: true }); setPendingCall(null); }} style={btnStyle}>허용</button>
+          <button onClick={() => { startHostCall(); socket.emit("allow-call", { roomId: id, allow: true }); localStorage.setItem("expert", pendingCall);/* reviewpage에서 값 초기화 필수! */ setPendingCall(null); }} style={btnStyle}>허용</button>
           <button onClick={() => { socket.emit("allow-call", { roomId: id, allow: false }); setPendingCall(null); }} style={{ ...btnStyle, background: "#444" }}>거부</button>
         </div>
       )}
@@ -518,6 +558,7 @@ const btnStyle = {
   padding: "8px 12px", background: "#1e1e1e", color: "#eee", border: "none",
   borderRadius: "8px", boxShadow: "0 2px 6px rgba(0,0,0,0.4)", cursor: "pointer", transition: "0.3s"
 };
+
 
 const drawerBtnStyle = {
   width:"100%",
