@@ -2,11 +2,29 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { socket } from "../../lib/socket";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import { app }               from "@/lib/firebase";  
+import { getDatabase, ref, get, set } from "firebase/database";
 
 export default function Rooms() {
   const [rooms, setRooms] = useState([]);
   const [filter, setFilter] = useState("전체");
+  const db = getDatabase(app);          
   const router = useRouter();
+  const [currentUser, setCurrentUser] = useState(null);
+  const [userJob, setUserJob] = useState(null);
+
+  useEffect(() => {
+    setCurrentUser(localStorage.getItem("nickname"));
+  }, []);
+  useEffect(()=> {
+    const fetchJob = async () => {
+      const snapshot = await get(ref(db, `users/${currentUser}/job`));
+      setUserJob(snapshot.val());
+    }
+    fetchJob();
+  }, [currentUser]);
 
   useEffect(() => {
     socket.emit("get-rooms");
@@ -21,6 +39,12 @@ export default function Rooms() {
   }, []);
 
   const getStatus = (room) => (room.count >= 2 ? "상담 중" : "대기 중");
+
+  const logOut = () => {
+    toast.info("로그아웃 되었습니다");
+    localStorage.setItem("nickname", null);
+    router.push("/signpage");
+  }
 
   const tryJoinRoom = (room) => {
     if (getStatus(room) === "상담 중") return;
@@ -57,6 +81,7 @@ export default function Rooms() {
       color: "#eee",
       padding: "20px"
     }}>
+      <ToastContainer position="top-center" />
       <h2 style={{ fontSize: "2rem", marginBottom: "20px" }}>상담 방 게시판 (실시간)</h2>
       <div style={{ display: "flex", gap: "10px", marginBottom: "30px" }}>
         {["전체", "대기 중", "상담 중"].map(tag => (
@@ -73,7 +98,7 @@ export default function Rooms() {
           </button>
         ))}
       </div>
-      <button onClick={() => router.push("/create")}
+      {userJob == "사용자" && <button onClick={() =>{router.push("/create")}}
         style={{
           padding: "10px 20px",
           background: "#1e1e1e",
@@ -84,7 +109,7 @@ export default function Rooms() {
           cursor: "pointer"
         }}>
         방 만들기
-      </button>
+      </button>}
       <div style={{
         display: "grid",
         gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
@@ -92,7 +117,12 @@ export default function Rooms() {
       }}>
         {rooms.filter(room => filter === "전체" || getStatus(room) === filter)
           .map(room => (
-            <div key={room.id} onClick={() => tryJoinRoom(room)}
+            <div key={room.id} onClick={() => {
+              if(userJob == "전문가")
+                tryJoinRoom(room);
+              else
+                toast.error("전문가만이 방에 참가할 수 있습니다");
+            }}
               style={{
                 background: getStatus(room) === "상담 중" ? "#2c2c2c" : "#1e1e1e",
                 borderRadius: "10px",
@@ -121,6 +151,29 @@ export default function Rooms() {
             </div>
           ))}
       </div>
+      <div style={{
+          position:"absolute",
+          top:0,
+          right: 0,
+          width:"240px",
+          height:"100%",
+          transition:"right .3s",
+          background:"#1e1e1e",
+          color:"#eee",
+          boxShadow:"-2px 0 6px rgba(0,0,0,.6)",
+          zIndex:30,
+          padding:"16px",
+          overflowY:"auto",
+
+        }}>
+          <h3 style={{margin:"0 0 12px"}}>안녕하세요 {currentUser}님!</h3>
+          <button onClick={() => logOut()}style={btnStyle}>로그아웃</button>
+      </div>
     </div>
   );
 }
+
+const btnStyle = {
+  padding: "8px 16px", background: "#b54545ff", color: "#eee", border: "none", position:"top-center",
+  borderRadius: "8px", boxShadow: "0 2px 6px rgba(0,0,0,0.4)", cursor: "pointer", transition: "0.3s"
+};
