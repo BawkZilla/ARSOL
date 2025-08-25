@@ -167,6 +167,9 @@ export default function Rooms() {
 
         }}>
           <h3 style={{margin:"0 0 12px"}}>안녕하세요 {currentUser}님!</h3>
+          <button style={drawerBtnStyle} onClick={() => router.push('/showreview')}>
+            리뷰 확인
+          </button>
           <button onClick={() => logOut()}style={btnStyle}>로그아웃</button>
       </div>
     </div>
@@ -176,4 +179,16 @@ export default function Rooms() {
 const btnStyle = {
   padding: "8px 16px", background: "#b54545ff", color: "#eee", border: "none", position:"top-center",
   borderRadius: "8px", boxShadow: "0 2px 6px rgba(0,0,0,0.4)", cursor: "pointer", transition: "0.3s"
+};
+
+const drawerBtnStyle = {
+  width:"100%",
+  padding:"10px",
+  marginBottom:"8px",
+  textAlign:"left",
+  background:"#2b2b2b",
+  color:"#eee",
+  border:"none",
+  borderRadius:"6px",
+  cursor:"pointer"
 };
