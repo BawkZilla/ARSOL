@@ -177,3 +177,15 @@ const btnStyle = {
   padding: "8px 16px", background: "#b54545ff", color: "#eee", border: "none", position:"top-center",
   borderRadius: "8px", boxShadow: "0 2px 6px rgba(0,0,0,0.4)", cursor: "pointer", transition: "0.3s"
 };
+
+const drawerBtnStyle = {
+  width:"100%",
+  padding:"10px",
+  marginBottom:"8px",
+  textAlign:"left",
+  background:"#2b2b2b",
+  color:"#eee",
+  border:"none",
+  borderRadius:"6px",
+  cursor:"pointer"
+};

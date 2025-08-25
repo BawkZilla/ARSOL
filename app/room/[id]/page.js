@@ -546,7 +546,7 @@ export default function Room() {
           background: "#1e1e1e", color: "#eee", padding: "20px", borderRadius: "8px", zIndex: 30
         }}>
           <div style={{ marginBottom: "10px" }}>{pendingCall} 님과 통화를 시작하시겠습니까?</div>
-          <button onClick={() => { startHostCall(); socket.emit("allow-call", { roomId: id, allow: true }); localStorage.setItem("expert", pendingCall);/* reviewpage에서 값 초기화 필수! */ setPendingCall(null); }} style={btnStyle}>허용</button>
+          <button onClick={() => { startHostCall(); socket.emit("allow-call", { roomId: id, allow: true }); localStorage.setItem("expert", pendingCall); localStorage.setItem("id",id);/* reviewpage에서 값 초기화 필수! */ setPendingCall(null); }} style={btnStyle}>허용</button>
           <button onClick={() => { socket.emit("allow-call", { roomId: id, allow: false }); setPendingCall(null); }} style={{ ...btnStyle, background: "#444" }}>거부</button>
         </div>
       )}
