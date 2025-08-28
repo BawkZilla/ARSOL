@@ -139,6 +139,30 @@ io.on("connection", (socket) => {
         }
     });
 
+    socket.on('update-object-transform', ({ roomId, objectId, position, rotation }) => {
+        const room = rooms[roomId];
+        if (room && room.hostId) {
+            io.to(room.hostId).emit('update-object-transform', { objectId, position, rotation });
+        }
+    });
+
+    socket.on('request-object-transform', ({ roomId, objectId }) => {
+        const room = rooms[roomId];
+        if (room && room.hostId) {
+            io.to(room.hostId).emit('request-object-transform', { objectId });
+        }
+    });
+
+    socket.on('send-object-transform', ({ roomId, objectId, position, rotation }) => {
+        const room = rooms[roomId];
+        if (room && room.users) {
+            const specialist = room.users.find(u => u.id !== room.hostId);
+            if (specialist) {
+                io.to(specialist.id).emit('send-object-transform', { objectId, position, rotation });
+            }
+        }
+    });
+
     const forwardToHost = (eventName) => {
         socket.on(eventName, ({ roomId, ...rest }) => {
             const room = rooms[roomId];

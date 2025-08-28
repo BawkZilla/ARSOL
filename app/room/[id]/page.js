@@ -30,6 +30,9 @@ export default function Room() {
     const [placedAnnotations, setPlacedAnnotations] = useState([]);
     const [annotationToDelete, setAnnotationToDelete] = useState(null);
     const [clearAllTrigger, setClearAllTrigger] = useState(0);
+    const [selectedAnnotationForMove, setSelectedAnnotationForMove] = useState(null);
+    const [tempPosition, setTempPosition] = useState({ x: 0, y: 0, z: 0 });
+    const [tempRotation, setTempRotation] = useState({ x: 0, y: 0, z: 0 });
   const db = getDatabase(app);  
   
   const [currentUser, setCurrentUser] = useState(null);
@@ -89,6 +92,7 @@ export default function Room() {
       peerToolRef.current = null;
       textValueRef.current = null;
     }}
+    socket={socket}
      />;
   }, [handleArStreamReady, drawData, peerClickCoords, annotationToDelete, clearAllTrigger]);
 
@@ -600,15 +604,75 @@ export default function Room() {
             {placedAnnotations.map(ann => (
                 <div key={ann.id} style={{display:"flex", justifyContent:"space-between", alignItems:"center", background:"#3a3a3a", padding:"8px", borderRadius:"4px"}}>
                     <span>{ann.type}</span>
-                    <button style={{background:"#c94b4b", border:"none", color:"white", padding:"4px 8px", borderRadius:"4px", cursor:"pointer"}} onClick={() => {
-                        socket.emit('delete-annotation', { roomId: id, annotationId: ann.id });
-                        setPlacedAnnotations(prev => prev.filter(a => a.id !== ann.id));
-                        toast.success("주석을 삭제했습니다.");
-                    }}>삭제</button>
+                    <div>
+                        <button style={{background:"#c94b4b", border:"none", color:"white", padding:"4px 8px", borderRadius:"4px", cursor:"pointer", marginRight:"8px"}} onClick={() => {
+                            socket.emit('delete-annotation', { roomId: id, annotationId: ann.id });
+                            setPlacedAnnotations(prev => prev.filter(a => a.id !== ann.id));
+                            toast.success("주석을 삭제했습니다.");
+                        }}>삭제</button>
+                        <button style={{background:"#4CAF50", border:"none", color:"white", padding:"4px 8px", borderRadius:"4px", cursor:"pointer"}} onClick={() => {
+                            setSelectedAnnotationForMove(ann);
+                            socket.emit('request-object-transform', { roomId: id, objectId: ann.id });
+                        }}>이동</button>
+                    </div>
                 </div>
             ))}
           </div>
 
+        </div>
+      )}
+
+      {selectedAnnotationForMove && (
+        <div style={{
+          position: "absolute",
+          bottom: "10px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          background: "#2b2b2b",
+          padding: "15px",
+          borderRadius: "8px",
+          boxShadow: "0 4px 8px rgba(0,0,0,0.5)",
+          zIndex: 40,
+          width: "90%",
+          maxWidth: "400px",
+          color: "#eee"
+        }}>
+          <h4 style={{marginTop:"0", marginBottom:"10px"}}>&#39;{selectedAnnotationForMove.type}&#39; 이동/회전</h4>
+          
+          <div style={{marginBottom:"10px"}}>
+            <label>Position X: {tempPosition.x.toFixed(2)}</label>
+            <input type="range" min="-5" max="5" step="0.01" value={tempPosition.x} onChange={(e) => setTempPosition({...tempPosition, x: parseFloat(e.target.value)})} style={{width:"100%"}} />
+            <label>Position Y: {tempPosition.y.toFixed(2)}</label>
+            <input type="range" min="-5" max="5" step="0.01" value={tempPosition.y} onChange={(e) => setTempPosition({...tempPosition, y: parseFloat(e.target.value)})} style={{width:"100%"}} />
+            <label>Position Z: {tempPosition.z.toFixed(2)}</label>
+            <input type="range" min="-5" max="5" step="0.01" value={tempPosition.z} onChange={(e) => setTempPosition({...tempPosition, z: parseFloat(e.target.value)})} style={{width:"100%"}} />
+          </div>
+
+          <div style={{marginBottom:"15px"}}>
+            <label>Rotation X: {tempRotation.x.toFixed(0)}°</label>
+            <input type="range" min="0" max="360" step="1" value={tempRotation.x} onChange={(e) => setTempRotation({...tempRotation, x: parseFloat(e.target.value)})} style={{width:"100%"}} />
+            <label>Rotation Y: {tempRotation.y.toFixed(0)}°</label>
+            <input type="range" min="0" max="360" step="1" value={tempRotation.y} onChange={(e) => setTempRotation({...tempRotation, y: parseFloat(e.target.value)})} style={{width:"100%"}} />
+            <label>Rotation Z: {tempRotation.z.toFixed(0)}°</label>
+            <input type="range" min="0" max="360" step="1" value={tempRotation.z} onChange={(e) => setTempRotation({...tempRotation, z: parseFloat(e.target.value)})} style={{width:"100%"}} />
+          </div>
+
+          <div style={{display:"flex", justifyContent:"space-around"}}>
+            <button style={{...btnStyle, background:"#4CAF50"}} onClick={() => {
+                socket.emit('update-object-transform', {
+                    roomId: id,
+                    objectId: selectedAnnotationForMove.id,
+                    position: tempPosition,
+                    rotation: tempRotation
+                });
+                setSelectedAnnotationForMove(null);
+                toast.success("주석 위치/회전 업데이트 완료!");
+            }}>적용</button>
+            <button style={{...btnStyle, background:"#f44336"}} onClick={() => {
+                setSelectedAnnotationForMove(null);
+                // Optionally, send a signal to unhighlight on host if needed
+            }}>취소</button>
+          </div>
         </div>
       )}
 

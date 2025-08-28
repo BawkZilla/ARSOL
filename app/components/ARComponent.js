@@ -4,12 +4,37 @@ import React, { useEffect, useRef } from 'react';
 
 // import * as THREE from 'three'; // 이 부분을 제거합니다.
 
-const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, peerTool, textValue, clearSelectedTool, clearPeerTool, onAnnotationPlaced, annotationToDelete, clearAllTrigger }) => {
+const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, peerTool, textValue, clearSelectedTool, clearPeerTool, onAnnotationPlaced, annotationToDelete, clearAllTrigger, socket, roomId }) => {
   const sceneRef = useRef(null);
   const videoRef = useRef(null);
   const combinedCanvasRef = useRef(null);
   const currentLineRef = useRef(null);
   const mindarSystemRef = useRef(null);
+  const selectedObjectRef = useRef(null); // To keep track of the currently selected object for move/rotate
+
+  const parseVec3 = (str) => {
+    if (!str) return { x: 0, y: 0, z: 0 };
+    const parts = str.split(' ').map(Number);
+    return { x: parts[0] || 0, y: parts[1] || 0, z: parts[2] || 0 };
+  };
+
+  const formatVec3 = (vec) => {
+    return `${vec.x} ${vec.y} ${vec.z}`;
+  };
+
+  const highlightObject = (objEl) => {
+    if (objEl && objEl.object3D) {
+        // Store original material/color if needed for unhighlight
+        // For simplicity, just change color for now
+        objEl.setAttribute('material', 'color: #00FFFF; opacity: 0.7'); // Cyan highlight
+    }
+  };
+
+  const unhighlightObject = (objEl) => {
+    if (objEl && objEl.object3D) {
+        objEl.removeAttribute('material'); // Revert to default or original
+    }
+  };
 
   const get3DPoint = (coords) => {
     const THREE = window.THREE;
@@ -301,6 +326,60 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
     }
 
   }, [drawData]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleRequestTransform = ({ objectId }) => {
+      const objEl = sceneRef.current.querySelector(`[data-annotation-id='${objectId}']`);
+      if (objEl) {
+        // Unhighlight previously selected object
+        if (selectedObjectRef.current && selectedObjectRef.current !== objEl) {
+          unhighlightObject(selectedObjectRef.current);
+        }
+        
+        // Highlight new selected object
+        highlightObject(objEl);
+        selectedObjectRef.current = objEl;
+
+        const position = parseVec3(objEl.getAttribute('position'));
+        const rotation = parseVec3(objEl.getAttribute('rotation')); // A-Frame rotation is Euler angles
+
+        socket.emit('send-object-transform', {
+          roomId: roomId,
+          objectId,
+          position,
+          rotation
+        });
+      }
+    };
+
+    const handleUpdateTransform = ({ objectId, position, rotation }) => {
+      const objEl = sceneRef.current.querySelector(`[data-annotation-id='${objectId}']`);
+      if (objEl) {
+        objEl.setAttribute('position', formatVec3(position));
+        objEl.setAttribute('rotation', formatVec3(rotation));
+        // After update, unhighlight if it was the selected object
+        if (selectedObjectRef.current === objEl) {
+            unhighlightObject(objEl);
+            selectedObjectRef.current = null;
+        }
+      }
+    };
+
+    socket.on('request-object-transform', handleRequestTransform);
+    socket.on('update-object-transform', handleUpdateTransform);
+
+    return () => {
+      socket.off('request-object-transform', handleRequestTransform);
+      socket.off('update-object-transform', handleUpdateTransform);
+      // Ensure any highlighted object is unhighlighted on unmount
+      if (selectedObjectRef.current) {
+          unhighlightObject(selectedObjectRef.current);
+          selectedObjectRef.current = null;
+      }
+    };
+  }, [socket, roomId]);
 
   useEffect(() => {
     if (annotationToDelete) {
