@@ -135,6 +135,7 @@ io.on("connection", (socket) => {
     socket.on("delete-room", (roomId) => {
         console.log(`Host disconnected, closing room ${roomId}`);
         delete rooms[roomId];
+        broadcastRooms();
     });
 
     socket.on("disconnect", () => {
