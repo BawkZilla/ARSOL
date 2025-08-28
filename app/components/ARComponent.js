@@ -255,6 +255,8 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
         const startPoint = parentEntity.object3D.worldToLocal(intersection.point.clone());
 
         const lineEntity = document.createElement('a-entity');
+        const lineId = Date.now(); // Generate unique ID for the line
+        lineEntity.setAttribute('data-annotation-id', lineId);
         parentEntity.appendChild(lineEntity);
 
         const geometry = new THREE.BufferGeometry();
@@ -268,7 +270,9 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
         currentLineRef.current = {
             line,
             parent: parentEntity,
-            points: [startPoint]
+            points: [startPoint],
+            lineEntity, // Store reference to the entity
+            lineId // Store the ID
         };
 
     } else if (state === 'move' && currentLineRef.current && intersection) {
@@ -290,6 +294,9 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
         line.geometry.computeBoundingSphere();
 
     } else if (state === 'end') {
+        if (currentLineRef.current) {
+            onAnnotationPlaced({ id: currentLineRef.current.lineId, type: 'draw' });
+        }
         currentLineRef.current = null;
     }
 

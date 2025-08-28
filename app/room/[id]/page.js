@@ -594,6 +594,7 @@ export default function Room() {
           <button style={{...drawerBtnStyle, background: "#872c2cff"}} onClick={() => {
               socket.emit('delete-all-annotations', { roomId: id });
               setPlacedAnnotations([]);
+              toast.success("모든 주석을 삭제했습니다.");
           }}>모두 삭제</button>
           <div style={{display:"flex", flexDirection:"column", gap:"6px", marginTop:"8px"}}>
             {placedAnnotations.map(ann => (
@@ -602,6 +603,7 @@ export default function Room() {
                     <button style={{background:"#c94b4b", border:"none", color:"white", padding:"4px 8px", borderRadius:"4px", cursor:"pointer"}} onClick={() => {
                         socket.emit('delete-annotation', { roomId: id, annotationId: ann.id });
                         setPlacedAnnotations(prev => prev.filter(a => a.id !== ann.id));
+                        toast.success("주석을 삭제했습니다.");
                     }}>삭제</button>
                 </div>
             ))}
