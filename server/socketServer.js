@@ -121,6 +121,24 @@ io.on("connection", (socket) => {
         socket.to(roomId).emit('place-success');
     });
 
+    socket.on('annotation-added', ({ roomId, annotation }) => {
+        socket.to(roomId).emit('annotation-added', annotation);
+    });
+
+    socket.on('delete-annotation', ({ roomId, annotationId }) => {
+        const room = rooms[roomId];
+        if (room && room.hostId) {
+            io.to(room.hostId).emit('delete-annotation', { annotationId });
+        }
+    });
+
+    socket.on('delete-all-annotations', ({ roomId }) => {
+        const room = rooms[roomId];
+        if (room && room.hostId) {
+            io.to(room.hostId).emit('delete-all-annotations');
+        }
+    });
+
     const forwardToHost = (eventName) => {
         socket.on(eventName, ({ roomId, ...rest }) => {
             const room = rooms[roomId];

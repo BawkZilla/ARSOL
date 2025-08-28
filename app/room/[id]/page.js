@@ -25,7 +25,11 @@ export default function Room() {
   const arCallStarted = useRef(false);
   const selectedToolRef = useRef(null);
   const peerToolRef = useRef(null);
-  const textValueRef = useRef(null);
+  const textValueRef = useRef('');
+      const [textValue, setTextValue] = useState('');
+    const [placedAnnotations, setPlacedAnnotations] = useState([]);
+    const [annotationToDelete, setAnnotationToDelete] = useState(null);
+    const [clearAllTrigger, setClearAllTrigger] = useState(0);
   const db = getDatabase(app);  
   
   const [currentUser, setCurrentUser] = useState(null);
@@ -59,6 +63,13 @@ export default function Room() {
     arCallStarted.current = true;
   }, []);
 
+  const handleAnnotationPlaced = (annotation) => {
+    if (userJob !== "전문가") { // Host only
+        socket.emit('annotation-added', { roomId: id, annotation });
+        placeSuccess(); // Notify the specialist that placement was successful
+    }
+  };
+
   const memoizedARComponent = useMemo(() => {
     return <ARComponent 
     onStreamReady={handleArStreamReady} 
@@ -71,13 +82,15 @@ export default function Room() {
       toast.success("주석을 배치했습니다");
       selectedToolRef.current = null;
     }}
+    onAnnotationPlaced={handleAnnotationPlaced}
+    annotationToDelete={annotationToDelete}
+    clearAllTrigger={clearAllTrigger}
     clearPeerTool={() => {
-      placeSuccess();
       peerToolRef.current = null;
       textValueRef.current = null;
     }}
      />;
-  }, [handleArStreamReady, drawData, peerClickCoords]);
+  }, [handleArStreamReady, drawData, peerClickCoords, annotationToDelete, clearAllTrigger]);
 
   
 
@@ -98,6 +111,10 @@ export default function Room() {
   useEffect(() => {
     setCurrentUser(localStorage.getItem("nickname"));
   }, []);
+
+  useEffect(() => {
+    textValueRef.current = textValue;
+  }, [textValue]);
 
   useEffect(()=> {
     const fetchJob = async () => {
@@ -184,12 +201,20 @@ export default function Room() {
   };
 
   const onDrawerItemClick = (tool) => {
-    if(arMode) selectedToolRef.current = tool;
-    else if(isPeerInArMode){
-      let textV = null;
-      if(tool == 'text')
-        textV = prompt('텍스트를 입력하세요');
-      socket.emit("peer-select", { roomId: id, tool: tool, text: textV });
+    if(arMode) { // Host placing an object
+      selectedToolRef.current = tool;
+    } else if(isPeerInArMode){ // Specialist placing an object
+      if(tool === 'text') {
+        const textV = prompt('텍스트를 입력하세요');
+        if (textV) {
+          setTextValue(textV); // Update state, which will update the ref via useEffect
+          socket.emit("peer-select", { roomId: id, tool: tool, text: textV });
+        } else {
+          return; // Don't proceed if user cancels prompt
+        }
+      } else {
+        socket.emit("peer-select", { roomId: id, tool: tool, text: null });
+      }
     }
      
     toast.info(`${tool} 배치 모드입니다. AR 화면을 터치하세요.`);
@@ -245,6 +270,28 @@ export default function Room() {
     });
 
     socket.on("place-success", () => {console.log("get success"); toast.success("주석을 배치했습니다");})
+
+    socket.on('annotation-added', (annotation) => {
+        if (userJob === "전문가") {
+            setPlacedAnnotations(prev => [...prev, annotation]);
+        }
+    });
+
+    socket.on('delete-annotation', ({ annotationId }) => {
+        if (userJob !== "전문가") {
+            setAnnotationToDelete(annotationId);
+        } else {
+            setPlacedAnnotations(prev => prev.filter(a => a.id !== annotationId));
+        }
+    });
+
+    socket.on('delete-all-annotations', () => {
+        if (userJob !== "전문가") {
+            setClearAllTrigger(c => c + 1);
+        } else {
+            setPlacedAnnotations([]);
+        }
+    });
 
     socket.on('place-object', ({ coords }) => setPeerClickCoords(coords));
     socket.on('draw-start', ({ coords }) => setDrawData({ state: 'start', coords }));
@@ -542,6 +589,24 @@ export default function Room() {
               <button style={subBtnStyle} onClick={() => onDrawerItemClick('gpu')}>GPU</button>
             </div>
           )}
+
+          <h3 style={{margin:"20px 0 12px"}}>배치된 주석</h3>
+          <button style={{...drawerBtnStyle, background: "#872c2cff"}} onClick={() => {
+              socket.emit('delete-all-annotations', { roomId: id });
+              setPlacedAnnotations([]);
+          }}>모두 삭제</button>
+          <div style={{display:"flex", flexDirection:"column", gap:"6px", marginTop:"8px"}}>
+            {placedAnnotations.map(ann => (
+                <div key={ann.id} style={{display:"flex", justifyContent:"space-between", alignItems:"center", background:"#3a3a3a", padding:"8px", borderRadius:"4px"}}>
+                    <span>{ann.type}</span>
+                    <button style={{background:"#c94b4b", border:"none", color:"white", padding:"4px 8px", borderRadius:"4px", cursor:"pointer"}} onClick={() => {
+                        socket.emit('delete-annotation', { roomId: id, annotationId: ann.id });
+                        setPlacedAnnotations(prev => prev.filter(a => a.id !== ann.id));
+                    }}>삭제</button>
+                </div>
+            ))}
+          </div>
+
         </div>
       )}
 

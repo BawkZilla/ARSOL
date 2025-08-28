@@ -4,7 +4,7 @@ import React, { useEffect, useRef } from 'react';
 
 // import * as THREE from 'three'; // 이 부분을 제거합니다.
 
-const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, peerTool, textValue, clearSelectedTool, clearPeerTool }) => {
+const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, peerTool, textValue, clearSelectedTool, clearPeerTool, onAnnotationPlaced, annotationToDelete, clearAllTrigger }) => {
   const sceneRef = useRef(null);
   const videoRef = useRef(null);
   const combinedCanvasRef = useRef(null);
@@ -185,13 +185,18 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
         } 
 
 
-        switch (currentTool) {
+        const annotationId = Date.now();
+      let newAnnotation;
+
+      switch (currentTool) {
         case 'marker': {                   // 빨간 구
           const sphere = document.createElement('a-sphere');
           sphere.setAttribute('radius', '0.05');
           sphere.setAttribute('color', 'red');
           sphere.setAttribute('position', localPos);
+          sphere.setAttribute('data-annotation-id', annotationId);
           parent.appendChild(sphere);
+          newAnnotation = sphere;
           break;
         }
         case 'text': {                     // 텍스트 입력 -> plane+text
@@ -203,12 +208,15 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           textPlane.setAttribute('height', '0.2');
           textPlane.setAttribute('width', Math.max(userText.length * 0.1, 0.3));
           textPlane.setAttribute('position', localPos);
+          textPlane.setAttribute('data-annotation-id', annotationId);
+
           const textEl = document.createElement('a-text');
           textEl.setAttribute('value', userText);
           textEl.setAttribute('align', 'center');
           textEl.setAttribute('color', 'red');
           textPlane.appendChild(textEl);
           parent.appendChild(textPlane);
+          newAnnotation = textPlane;
           break;
         }
         case 'cpu':
@@ -218,13 +226,18 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           model.setAttribute('gltf-model', `url(/models/${currentTool}.gltf)`);
           model.setAttribute('scale', '0.2 0.2 0.2');
           model.setAttribute('position', localPos);
+          model.setAttribute('data-annotation-id', annotationId);
           parent.appendChild(model);
+          newAnnotation = model;
           break;
         }
         default:
           break;
       }
-      console.log(currentTool ," 배치 완료(peer)");
+      if (newAnnotation) {
+        console.log(currentTool , " 배치 완료(peer)");
+        onAnnotationPlaced({ id: annotationId, type: currentTool });
+      }
       clearPeerTool();
     }
   }, [peerClickCoords, textValue]);
@@ -281,6 +294,24 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
     }
 
   }, [drawData]);
+
+  useEffect(() => {
+    if (annotationToDelete) {
+        const el = sceneRef.current.querySelector(`[data-annotation-id='${annotationToDelete}']`);
+        if (el) {
+            el.remove();
+            console.log(`Annotation ${annotationToDelete} deleted.`);
+        }
+    }
+  }, [annotationToDelete]);
+
+  useEffect(() => {
+    if (clearAllTrigger > 0) {
+        const allAnnotations = sceneRef.current.querySelectorAll('[data-annotation-id]');
+        allAnnotations.forEach(el => el.remove());
+        console.log('All annotations deleted.');
+    }
+  }, [clearAllTrigger]);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
