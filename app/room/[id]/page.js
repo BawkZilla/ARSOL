@@ -435,10 +435,7 @@ export default function Room() {
 
     if (!newArMode) {
       startHostCall("webcam");
-      const mindarContainer = document.querySelector(".mindar-ui-overlay");
-      if (mindarContainer) {
-        mindarContainer.remove();
-      }
+      document.querySelectorAll('.mindar-ui-overlay, .mindar-ui-loading').forEach(el => el.remove());
     }
   };
 

@@ -9,6 +9,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
   const videoRef = useRef(null);
   const combinedCanvasRef = useRef(null);
   const currentLineRef = useRef(null);
+  const mindarSystemRef = useRef(null);
 
   const get3DPoint = (coords) => {
     const THREE = window.THREE;
@@ -38,8 +39,6 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
   useEffect(() => {
     const sceneEl = sceneRef.current;
     if (!sceneEl) return;
-
-    let mindarSystem = null;
 
     const setupStream = async () => {
       try {
@@ -72,13 +71,13 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
         };
 
         if (sceneEl.hasLoaded) {
-          mindarSystem = sceneEl.systems['mindar-image-system'];
-          mindarSystem.start();
+          mindarSystemRef.current = sceneEl.systems['mindar-image-system'];
+          mindarSystemRef.current.start();
           checkCanvas();
         } else {
           sceneEl.addEventListener('loaded', () => {
-            mindarSystem = sceneEl.systems['mindar-image-system'];
-            mindarSystem.start();
+            mindarSystemRef.current = sceneEl.systems['mindar-image-system'];
+            mindarSystemRef.current.start();
             checkCanvas();
           }, { once: true });
         }
@@ -159,12 +158,13 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
     }
 
     return () => {
-      if (mindarSystem) mindarSystem.stop();
+      if (mindarSystemRef.current) {
+        mindarSystemRef.current.stop();
+      }
       if (videoRef.current && videoRef.current.srcObject) {
         videoRef.current.srcObject.getTracks().forEach(track => track.stop());
       }
-      const uiOverlay = document.querySelector('.mindar-ui-overlay');
-      if (uiOverlay) uiOverlay.remove();
+      document.querySelectorAll('.mindar-ui-overlay, .mindar-ui-loading').forEach(el => el.remove());
     };
   }, [onStreamReady]);
 
