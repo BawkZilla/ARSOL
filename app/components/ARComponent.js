@@ -125,28 +125,49 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
       const localPos = parent.object3D.worldToLocal(touchPoint.clone());
       
       switch (currentTool) {
-        case 'marker': {                   // 빨간 구
-          const sphere = document.createElement('a-sphere');
-          sphere.setAttribute('radius', '0.05');
-          sphere.setAttribute('color', 'blue');
-          sphere.setAttribute('position', localPos);
-          parent.appendChild(sphere);
+        case 'marker': {                   // 빨간 구 -> 역삼각뿔
+          const coneHeight = 0.1;
+          const coneRadius = 0.02;
+          const cone = document.createElement('a-cone');
+          cone.setAttribute('height', coneHeight);
+          cone.setAttribute('radius-bottom', coneRadius);
+          cone.setAttribute('radius-top', 0);
+          cone.setAttribute('color', 'blue');
+          cone.setAttribute('rotation', '180 0 0'); // Invert to point downwards
+          cone.setAttribute('position', `${localPos.x} ${localPos.y + coneHeight / 2} ${localPos.z}`);
+          // Host markers are not tracked for deletion/movement, so no annotationId or newAnnotation
+          parent.appendChild(cone);
           break;
         }
         case 'text': {                     // 텍스트 입력 -> plane+text
           const userText = prompt('텍스트를 입력하세요');
           if (!userText) break;
-          const textPlane = document.createElement('a-plane');
-          textPlane.setAttribute('color', '#FFFFFF');
-          textPlane.setAttribute('height', '0.2');
-          textPlane.setAttribute('width', Math.max(userText.length * 0.1, 0.3));
-          textPlane.setAttribute('position', localPos);
-          const textEl = document.createElement('a-text');
-          textEl.setAttribute('value', userText);
-          textEl.setAttribute('align', 'center');
-          textEl.setAttribute('color', '#0008ffff');
-          textPlane.appendChild(textEl);
-          parent.appendChild(textPlane);
+
+          const textContainer = document.createElement('a-entity');
+          textContainer.setAttribute('position', localPos);
+          textContainer.setAttribute('scale', '1.2 1.2 1.2'); // Overall text size
+
+          // Outline text (black, very thin border)
+          const outlineTextEl = document.createElement('a-text');
+          outlineTextEl.setAttribute('value', userText);
+          outlineTextEl.setAttribute('align', 'center');
+          outlineTextEl.setAttribute('color', 'black');
+          outlineTextEl.setAttribute('width', '1'); // Base width
+          outlineTextEl.setAttribute('scale', '1.01 1.01 1.01'); // Very thin outline
+          outlineTextEl.setAttribute('position', '0 0 -0.0001'); // Slightly behind
+          textContainer.appendChild(outlineTextEl);
+
+          // Main text (white)
+          const mainTextEl = document.createElement('a-text');
+          mainTextEl.setAttribute('value', userText);
+          mainTextEl.setAttribute('align', 'center');
+          mainTextEl.setAttribute('color', 'white');
+          mainTextEl.setAttribute('width', '1'); // Base width
+          mainTextEl.setAttribute('scale', '1 1 1');
+          mainTextEl.setAttribute('position', '0 0 0');
+          textContainer.appendChild(mainTextEl);
+
+          parent.appendChild(textContainer);
           break;
         }
         case 'cpu':
@@ -214,34 +235,53 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
       let newAnnotation;
 
       switch (currentTool) {
-        case 'marker': {                   // 빨간 구
-          const sphere = document.createElement('a-sphere');
-          sphere.setAttribute('radius', '0.05');
-          sphere.setAttribute('color', 'red');
-          sphere.setAttribute('position', localPos);
-          sphere.setAttribute('data-annotation-id', annotationId);
-          parent.appendChild(sphere);
-          newAnnotation = sphere;
+        case 'marker': {                   // 빨간 구 -> 역삼각뿔
+          const coneHeight = 0.1;
+          const coneRadius = 0.02;
+          const cone = document.createElement('a-cone');
+          cone.setAttribute('height', coneHeight);
+          cone.setAttribute('radius-bottom', coneRadius);
+          cone.setAttribute('radius-top', 0);
+          cone.setAttribute('color', 'red'); // Peer's marker is red
+          cone.setAttribute('rotation', '180 0 0'); // Invert to point downwards
+          cone.setAttribute('position', `${localPos.x} ${localPos.y + coneHeight / 2} ${localPos.z}`);
+          cone.setAttribute('data-annotation-id', annotationId);
+          parent.appendChild(cone);
+          newAnnotation = cone;
           break;
         }
         case 'text': {                     // 텍스트 입력 -> plane+text
           const userText = textValue.current;
           console.log("peer text: ", userText);
           if (!userText) break;
-          const textPlane = document.createElement('a-plane');
-          textPlane.setAttribute('color', '#FFFFFF');
-          textPlane.setAttribute('height', '0.2');
-          textPlane.setAttribute('width', Math.max(userText.length * 0.1, 0.3));
-          textPlane.setAttribute('position', localPos);
-          textPlane.setAttribute('data-annotation-id', annotationId);
 
-          const textEl = document.createElement('a-text');
-          textEl.setAttribute('value', userText);
-          textEl.setAttribute('align', 'center');
-          textEl.setAttribute('color', 'red');
-          textPlane.appendChild(textEl);
-          parent.appendChild(textPlane);
-          newAnnotation = textPlane;
+          const textContainer = document.createElement('a-entity');
+          textContainer.setAttribute('position', localPos);
+          textContainer.setAttribute('data-annotation-id', annotationId); // Add ID to container
+          textContainer.setAttribute('scale', '1.2 1.2 1.2'); // Overall text size
+
+          // Outline text (black, very thin border)
+          const outlineTextEl = document.createElement('a-text');
+          outlineTextEl.setAttribute('value', userText);
+          outlineTextEl.setAttribute('align', 'center');
+          outlineTextEl.setAttribute('color', 'black');
+          outlineTextEl.setAttribute('width', '1'); // Base width
+          outlineTextEl.setAttribute('scale', '1.01 1.01 1.01'); // Very thin outline
+          outlineTextEl.setAttribute('position', '0 0 -0.0001'); // Slightly behind
+          textContainer.appendChild(outlineTextEl);
+
+          // Main text (white)
+          const mainTextEl = document.createElement('a-text');
+          mainTextEl.setAttribute('value', userText);
+          mainTextEl.setAttribute('align', 'center');
+          mainTextEl.setAttribute('color', 'white');
+          mainTextEl.setAttribute('width', '1'); // Base width
+          mainTextEl.setAttribute('scale', '1 1 1');
+          mainTextEl.setAttribute('position', '0 0 0');
+          textContainer.appendChild(mainTextEl);
+
+          parent.appendChild(textContainer);
+          newAnnotation = textContainer; // newAnnotation is the container
           break;
         }
         case 'cpu':
@@ -283,6 +323,8 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
         const lineId = Date.now(); // Generate unique ID for the line
         lineEntity.setAttribute('data-annotation-id', lineId);
         parentEntity.appendChild(lineEntity);
+
+        lineEntity.setAttribute('scale', '1.5 1.5 1.5'); // Make the line thicker
 
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([startPoint.x, startPoint.y, startPoint.z]), 3));
@@ -417,16 +459,16 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
           <a-entity mindar-image-target="targetIndex: 0">
-            <a-plane class="target-plane" material="color: yellow; transparent: true; opacity: 0.5" visible="false" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
           </a-entity>
           <a-entity mindar-image-target="targetIndex: 1">
-            <a-plane class="target-plane" material="color: yellow; transparent: true; opacity: 0.5" visible="false" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
           </a-entity>
           <a-entity mindar-image-target="targetIndex: 2">
-            <a-plane class="target-plane" material="color: yellow; transparent: true; opacity: 0.5" visible="false" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
           </a-entity>
           <a-entity mindar-image-target="targetIndex: 3">
-            <a-plane class="target-plane" material="color: yellow; transparent: true; opacity: 0.5" visible="false" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
           </a-entity>
         </a-scene>
       </div>

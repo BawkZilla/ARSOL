@@ -641,11 +641,11 @@ export default function Room() {
           
           <div style={{marginBottom:"10px"}}>
             <label>Position X: {tempPosition.x.toFixed(2)}</label>
-            <input type="range" min="-5" max="5" step="0.01" value={tempPosition.x} onChange={(e) => setTempPosition({...tempPosition, x: parseFloat(e.target.value)})} style={{width:"100%"}} />
+            <input type="range" min="-0.3" max="0.3" step="0.01" value={tempPosition.x} onChange={(e) => setTempPosition({...tempPosition, x: parseFloat(e.target.value)})} style={{width:"100%"}} />
             <label>Position Y: {tempPosition.y.toFixed(2)}</label>
-            <input type="range" min="-5" max="5" step="0.01" value={tempPosition.y} onChange={(e) => setTempPosition({...tempPosition, y: parseFloat(e.target.value)})} style={{width:"100%"}} />
+            <input type="range" min="-0.3" max="0.3" step="0.01" value={tempPosition.y} onChange={(e) => setTempPosition({...tempPosition, y: parseFloat(e.target.value)})} style={{width:"100%"}} />
             <label>Position Z: {tempPosition.z.toFixed(2)}</label>
-            <input type="range" min="-5" max="5" step="0.01" value={tempPosition.z} onChange={(e) => setTempPosition({...tempPosition, z: parseFloat(e.target.value)})} style={{width:"100%"}} />
+            <input type="range" min="-0.3" max="0.3" step="0.01" value={tempPosition.z} onChange={(e) => setTempPosition({...tempPosition, z: parseFloat(e.target.value)})} style={{width:"100%"}} />
           </div>
 
           <div style={{marginBottom:"15px"}}>
