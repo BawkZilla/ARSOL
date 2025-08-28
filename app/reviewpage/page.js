@@ -22,14 +22,21 @@ export default function Review() {
         setReviewSerialNum(localStorage.getItem("id"));
     }, [])
 
+    useEffect(() => {
+        return () => {
+            window.localStorage.removeItem("id");
+            window.localStorage.removeItem("expert");
+        };
+    }, []);
+
     const initialize = () => {
         setStar(0);
         setReviewContent("");
         setExpert(null);
         setReviewSerialNum(null);
         setUser(null);
-        window.localStorage.setItem("id", null);
-        window.localStorage.setItem("expert", null);
+        window.localStorage.removeItem("id");
+        window.localStorage.removeItem("expert");
         router.push('/rooms');
     };
 

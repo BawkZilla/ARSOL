@@ -36,6 +36,7 @@ export default function Room() {
   const [pendingCall, setPendingCall] = useState(null);
   const [drawData, setDrawData] = useState(null);
   const [peerClickCoords, setPeerClickCoords] = useState(null);
+  const [showReviewPrompt, setShowReviewPrompt] = useState(false);
 
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [posX, setPosX] = useState(20);
@@ -189,19 +190,14 @@ export default function Room() {
   };
 
   useEffect(() => {
-    const userJob = null;
-    const currentUser = localStorage.getItem("nickname");
-    const fetchJob = async () => {
-      const snapshot = await get(ref(db, `users/${currentUser}/job`));
-      userJob = snapshot.val();
-    }
-    fetchJob();
-    
     socket.on("room-users", ({ users }) => setJoined(users.length >= 2));
     socket.on("ask-call-permission", ({ expertNickname }) => setPendingCall(expertNickname));
     socket.on("peer-disconnected", () => {
-      if(userJob === "사용자")
-        toast.info("상대방이 방을 나갔습니다. 다른 전문가를 기다리세요");
+      if(userJob !== "전문가") {
+        setShowReviewPrompt(true);
+      } else {
+        toast.info("상대방이 방을 나갔습니다.");
+      }
     });
     socket.on("call-permission-result", ({ allow }) => {
       if (!allow) {
@@ -216,8 +212,11 @@ export default function Room() {
     socket.on("room-closed", () => {
       toast.info("방장이 방을 닫았습니다.");
       console.log("방 닫힘", userJob);
-      if(userJob === "전문가")
+      if(userJob !== "전문가") {
+        setShowReviewPrompt(true);
+      } else {
         setTimeout(() => router.push("/rooms"), 2000);
+      }
     });
     socket.on("signal", async ({ data }) => {
       if (data.type === "offer") await handlePeerOffer(data);
@@ -260,7 +259,7 @@ export default function Room() {
       socket.off("draw-end");
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, socketId]);
+  }, [id, socketId, userJob]);
 
   useEffect(() => {
     if (localStream.current) {
@@ -272,10 +271,10 @@ export default function Room() {
 
   const leaveRoom = () =>{
     socket.emit("leave-room", id);
-    if(userJob == "전문가")
-      router.push("/rooms");
-    else
+    if(userJob !== "전문가")
       router.push("/reviewpage");
+    else
+      router.push("/rooms");
   }
 
   const initPeerConnection = () => {
@@ -534,6 +533,17 @@ export default function Room() {
               <button style={subBtnStyle} onClick={() => onDrawerItemClick('gpu')}>GPU</button>
             </div>
           )}
+        </div>
+      )}
+
+      {showReviewPrompt && (
+        <div style={{
+          position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+          background: "#1e1e1e", color: "#eee", padding: "20px", borderRadius: "8px", zIndex: 30
+        }}>
+          <div style={{ marginBottom: "10px" }}>상대방이 나갔습니다. 리뷰를 작성하시겠습니까?</div>
+          <button onClick={() => router.push("/reviewpage")} style={btnStyle}>리뷰 작성</button>
+          <button onClick={() => { socket.emit("review-declined", id); setShowReviewPrompt(false); }} style={{ ...btnStyle, background: "#444" }}>작성하지 않음</button>
         </div>
       )}
 

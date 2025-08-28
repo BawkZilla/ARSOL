@@ -23,7 +23,8 @@ io.on("connection", (socket) => {
             postContent,
             hostId: socket.id,
             hostNickname: nickname,
-            users: [{ id: socket.id, nickname }]
+            users: [{ id: socket.id, nickname }],
+            pendingReview: false
         };
         socket.join(roomId);
         console.log(`Room created: ${roomId} by ${nickname}`);
@@ -35,7 +36,7 @@ io.on("connection", (socket) => {
     socket.on("join-room", ({ roomId, password, nickname }) => {
         console.log(`join-room: ${socket.id} -> ${roomId}, pw=${password}`);
         const room = rooms[roomId];
-        if (!room) return socket.emit("room-not-found");
+        if (!room || room.pendingReview) return socket.emit("room-not-found");
 
         if (socket.id !== room.hostId && room.password !== password) {
             console.log(`Invalid password for ${roomId}`);
@@ -129,13 +130,22 @@ io.on("connection", (socket) => {
     forwardToHost('draw-end');
 
     socket.on("leave-room", (roomId) => {
-        handleLeave(socket, roomId)        
+        handleLeave(socket, roomId);
+        broadcastRooms();
     });
 
     socket.on("delete-room", (roomId) => {
         console.log(`Host disconnected, closing room ${roomId}`);
         delete rooms[roomId];
         broadcastRooms();
+    });
+
+    socket.on("review-declined", (roomId) => {
+        const room = rooms[roomId];
+        if (room) {
+            room.pendingReview = false;
+            broadcastRooms();
+        }
     });
 
     socket.on("disconnect", () => {
@@ -157,6 +167,7 @@ io.on("connection", (socket) => {
             io.to(roomId).emit("room-closed");
             delete rooms[roomId];
         } else {
+            room.pendingReview = true;
             io.to(roomId).emit("room-users", {
                 users: room.users,
                 host: room.hostId
@@ -166,24 +177,23 @@ io.on("connection", (socket) => {
         }
     }
 
+    function getRoomList() {
+        return Object.keys(rooms)
+            .filter(id => !rooms[id].pendingReview) // Filter rooms
+            .map(id => ({
+                id,
+                roomName: rooms[id].roomName,
+                postContent: rooms[id].postContent,
+                count: rooms[id].users.length
+            }));
+    }
+
     function sendRoomList(socket) {
-        const list = Object.keys(rooms).map(id => ({
-            id,
-            roomName: rooms[id].roomName,
-            postContent: rooms[id].postContent,
-            count: rooms[id].users.length
-        }));
-        socket.emit("rooms-updated", list);
+        socket.emit("rooms-updated", getRoomList());
     }
 
     function broadcastRooms() {
-        const list = Object.keys(rooms).map(id => ({
-            id,
-            roomName: rooms[id].roomName,
-            postContent: rooms[id].postContent,
-            count: rooms[id].users.length
-        }));
-        io.emit("rooms-updated", list);
+        io.emit("rooms-updated", getRoomList());
     }
 });
 
