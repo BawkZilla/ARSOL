@@ -116,6 +116,11 @@ io.on("connection", (socket) => {
         }
     });
 
+    socket.on('peer-placed',({roomId}) => {
+        console.log("get success");
+        socket.to(roomId).emit('place-success');
+    });
+
     const forwardToHost = (eventName) => {
         socket.on(eventName, ({ roomId, ...rest }) => {
             const room = rooms[roomId];

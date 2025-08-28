@@ -68,9 +68,11 @@ export default function Room() {
     peerTool={peerToolRef}
     textValue={textValueRef}
     clearSelectedTool={() => {
+      toast.success("주석을 배치했습니다");
       selectedToolRef.current = null;
     }}
     clearPeerTool={() => {
+      placeSuccess();
       peerToolRef.current = null;
       textValueRef.current = null;
     }}
@@ -177,6 +179,10 @@ export default function Room() {
     }
   }, [isPeerInArMode, id]);
 
+  const placeSuccess = () => {
+    socket.emit('peer-placed', {roomId: id});
+  };
+
   const onDrawerItemClick = (tool) => {
     if(arMode) selectedToolRef.current = tool;
     else if(isPeerInArMode){
@@ -238,6 +244,8 @@ export default function Room() {
       console.log("주석 종류: ", peerToolRef, " 텍스트: ", textValueRef);
     });
 
+    socket.on("place-success", () => {console.log("get success"); toast.success("주석을 배치했습니다");})
+
     socket.on('place-object', ({ coords }) => setPeerClickCoords(coords));
     socket.on('draw-start', ({ coords }) => setDrawData({ state: 'start', coords }));
     socket.on('draw-move', ({ coords }) => setDrawData({ state: 'move', coords }));
@@ -254,6 +262,7 @@ export default function Room() {
       socket.off("peer-ar-mode-changed");
       socket.off("tool-select");
       socket.off("place-object");
+      socket.off("place-success");
       socket.off("draw-start");
       socket.off("draw-move");
       socket.off("draw-end");
