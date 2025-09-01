@@ -7,6 +7,7 @@ import "react-toastify/dist/ReactToastify.css";
 import dynamic from "next/dynamic";
 import { app }               from "@/lib/firebase";  
 import { getDatabase, ref, get, set } from "firebase/database";
+import { saveAs } from "file-saver";
 
 const ARComponent = dynamic(
   () => import("../../components/ARComponent"),
@@ -26,13 +27,13 @@ export default function Room() {
   const selectedToolRef = useRef(null);
   const peerToolRef = useRef(null);
   const textValueRef = useRef('');
-      const [textValue, setTextValue] = useState('');
-    const [placedAnnotations, setPlacedAnnotations] = useState([]);
-    const [annotationToDelete, setAnnotationToDelete] = useState(null);
-    const [clearAllTrigger, setClearAllTrigger] = useState(0);
-    const [selectedAnnotationForMove, setSelectedAnnotationForMove] = useState(null);
-    const [tempPosition, setTempPosition] = useState({ x: 0, y: 0, z: 0 });
-    const [tempRotation, setTempRotation] = useState({ x: 0, y: 0, z: 0 });
+  const [textValue, setTextValue] = useState('');
+  const [placedAnnotations, setPlacedAnnotations] = useState([]);
+  const [annotationToDelete, setAnnotationToDelete] = useState(null);
+  const [clearAllTrigger, setClearAllTrigger] = useState(0);
+  const [selectedAnnotationForMove, setSelectedAnnotationForMove] = useState(null);
+  const [tempPosition, setTempPosition] = useState({ x: 0, y: 0, z: 0 });
+  const [tempRotation, setTempRotation] = useState({ x: 0, y: 0, z: 0 });
   const db = getDatabase(app);  
   
   const [currentUser, setCurrentUser] = useState(null);
@@ -44,6 +45,10 @@ export default function Room() {
   const [drawData, setDrawData] = useState(null);
   const [peerClickCoords, setPeerClickCoords] = useState(null);
   const [showReviewPrompt, setShowReviewPrompt] = useState(false);
+
+  const dirHandleRef    = useRef(null);
+  const recorderRef     = useRef(null);
+  const recordedChunks  = useRef([]);
 
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [posX, setPosX] = useState(20);
@@ -58,6 +63,78 @@ export default function Room() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showObjectDetail, setShowObjectDetail] = useState(false); // drawer 내 3D 오브젝트 영역 세부요소 토글
 
+  const FS_SUPPORTED = "showDirectoryPicker" in window;
+
+  async function initDirectory() {
+    if (!FS_SUPPORTED || dirHandleRef.current) return;
+    const root = await window.showDirectoryPicker({ mode: "readwrite" });
+    dirHandleRef.current = await root.getDirectoryHandle(
+      "Recordings",
+      { create: true }
+    );
+  };
+
+  async function startRecording() {
+
+    const ok = window.confirm("화면 녹화를 시작할까요?");
+    if (!ok) return; 
+    await initDirectory();                       
+    if (recorderRef.current) return;            
+
+    const displayStream = await navigator.mediaDevices.getDisplayMedia({
+      video: {
+        displaySurface: "window",        // 탭·창·브라우저 계열
+        preferCurrentTab: true,           // 현-탭 우선
+        surfaceSwitching: "exclude",      // 중간 변경 방지
+        selfBrowserSurface: "include"     // 내부 UI 제외 X
+      },
+      audio: true
+    });
+
+    const recorder = new MediaRecorder(displayStream, {
+      mimeType: "video/webm;codecs=vp9,opus",
+    });
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size) recordedChunks.current.push(e.data);
+    };
+
+    recorder.onstop = async () => {
+      const blob = new Blob(recordedChunks.current, { type: "video/webm" });
+      recordedChunks.current = [];
+
+      const ts = new Date().toISOString().replace(/[-:]/g, "").split(".")[0];
+      const fileName = `${ts}_${id}.webm`;
+
+      try {
+        if (dirHandleRef.current) {
+          const fh = await dirHandleRef.current.getFileHandle(fileName, { create:true });
+          const w = await fh.createWritable();
+          await w.write(blob);
+          await w.close();
+          toast.success("녹화가 Recordings 폴더에 저장되었습니다.");
+        } else { throw new Error("FS unsupported"); }
+      } catch (err) {
+        saveAs(blob, fileName);                  
+        toast.error("폴더 접근 불가 → 기본 다운로드로 저장했습니다.");
+      }
+
+      
+      displayStream.getTracks().forEach(t => t.stop());
+    };
+
+    recorder.start();
+    recorderRef.current = recorder;
+  };
+
+  function stopRecording() {
+    if (recorderRef.current) {
+      recorderRef.current.stop();   
+      recorderRef.current = null;
+    }
+  };
+
+
   const handleArStreamReady = useCallback((stream) => {
     if (arCallStarted.current) return;
     arStreamRef.current = stream;
@@ -67,9 +144,9 @@ export default function Room() {
   }, []);
 
   const handleAnnotationPlaced = (annotation) => {
-    if (userJob !== "전문가") { // Host only
+    if (userJob !== "전문가") { 
         socket.emit('annotation-added', { roomId: id, annotation });
-        placeSuccess(); // Notify the specialist that placement was successful
+        placeSuccess(); 
     }
   };
 
@@ -228,6 +305,7 @@ export default function Room() {
     socket.on("room-users", ({ users }) => setJoined(users.length >= 2));
     socket.on("ask-call-permission", ({ expertNickname }) => setPendingCall(expertNickname));
     socket.on("peer-disconnected", () => {
+      stopRecording();
       if(userJob !== "전문가") {
         setShowReviewPrompt(true);
       } else {
@@ -246,6 +324,7 @@ export default function Room() {
     });
     socket.on("room-closed", () => {
       toast.info("방장이 방을 닫았습니다.");
+      stopRecording();
       console.log("방 닫힘", userJob);
       if(userJob !== "전문가") {
         setShowReviewPrompt(true);
@@ -331,6 +410,7 @@ export default function Room() {
 
   const leaveRoom = () =>{
     socket.emit("leave-room", id);
+    stopRecording();
     if(userJob !== "전문가")
       router.push("/reviewpage");
     else
@@ -371,6 +451,8 @@ export default function Room() {
 
       localStream.current = stream;
       if(localVideo.current) localVideo.current.srcObject = stream;
+
+      
 
       stream.getTracks().forEach(track => pc.current.addTrack(track, stream));
 
@@ -693,7 +775,7 @@ export default function Room() {
           background: "#1e1e1e", color: "#eee", padding: "20px", borderRadius: "8px", zIndex: 30
         }}>
           <div style={{ marginBottom: "10px" }}>{pendingCall} 님과 통화를 시작하시겠습니까?</div>
-          <button onClick={() => { startHostCall(); socket.emit("allow-call", { roomId: id, allow: true }); localStorage.setItem("expert", pendingCall); localStorage.setItem("id",id);/* reviewpage에서 값 초기화 필수! */ setPendingCall(null); }} style={btnStyle}>허용</button>
+          <button onClick={() => { startHostCall(); startRecording(); socket.emit("allow-call", { roomId: id, allow: true }); localStorage.setItem("expert", pendingCall); localStorage.setItem("id",id);/* reviewpage에서 값 초기화 필수! */ setPendingCall(null); }} style={btnStyle}>허용</button>
           <button onClick={() => { socket.emit("allow-call", { roomId: id, allow: false }); setPendingCall(null); }} style={{ ...btnStyle, background: "#444" }}>거부</button>
         </div>
       )}
