@@ -7,7 +7,7 @@ import "react-toastify/dist/ReactToastify.css";
 import dynamic from "next/dynamic";
 import { app }               from "@/lib/firebase";  
 import { getDatabase, ref, get, set } from "firebase/database";
-import { saveAs } from "file-saver";
+import { supabase } from '@/lib/supabaseClient';
 
 const ARComponent = dynamic(
   () => import("../../components/ARComponent"),
@@ -36,6 +36,7 @@ export default function Room() {
   const [tempRotation, setTempRotation] = useState({ x: 0, y: 0, z: 0 });
   const db = getDatabase(app);  
   
+  
   const [currentUser, setCurrentUser] = useState(null);
   const [userJob, setUserJob] = useState(null);
   const [socketId, setSocketId] = useState(null);
@@ -46,7 +47,6 @@ export default function Room() {
   const [peerClickCoords, setPeerClickCoords] = useState(null);
   const [showReviewPrompt, setShowReviewPrompt] = useState(false);
 
-  const dirHandleRef    = useRef(null);
   const recorderRef     = useRef(null);
   const recordedChunks  = useRef([]);
 
@@ -63,22 +63,13 @@ export default function Room() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showObjectDetail, setShowObjectDetail] = useState(false); // drawer 내 3D 오브젝트 영역 세부요소 토글
 
-  const FS_SUPPORTED = "showDirectoryPicker" in window;
-
-  async function initDirectory() {
-    if (!FS_SUPPORTED || dirHandleRef.current) return;
-    const root = await window.showDirectoryPicker({ mode: "readwrite" });
-    dirHandleRef.current = await root.getDirectoryHandle(
-      "Recordings",
-      { create: true }
-    );
-  };
+  
 
   async function startRecording() {
 
     const ok = window.confirm("화면 녹화를 시작할까요?");
     if (!ok) return; 
-    await initDirectory();                       
+                          
     if (recorderRef.current) return;            
 
     const displayStream = await navigator.mediaDevices.getDisplayMedia({
@@ -100,27 +91,40 @@ export default function Room() {
     };
 
     recorder.onstop = async () => {
-      const blob = new Blob(recordedChunks.current, { type: "video/webm" });
-      recordedChunks.current = [];
-
-      const ts = new Date().toISOString().replace(/[-:]/g, "").split(".")[0];
-      const fileName = `${ts}_${id}.webm`;
-
-      try {
-        if (dirHandleRef.current) {
-          const fh = await dirHandleRef.current.getFileHandle(fileName, { create:true });
-          const w = await fh.createWritable();
-          await w.write(blob);
-          await w.close();
-          toast.success("녹화가 Recordings 폴더에 저장되었습니다.");
-        } else { throw new Error("FS unsupported"); }
-      } catch (err) {
-        saveAs(blob, fileName);                  
-        toast.error("폴더 접근 불가 → 기본 다운로드로 저장했습니다.");
-      }
 
       
-      displayStream.getTracks().forEach(t => t.stop());
+      // ① blob 생성
+      const blob = new Blob(recordedChunks.current, { type: 'video/webm' });
+      recordedChunks.current = [];
+
+      // ② 파일 경로 & MIME
+      const ts = new Date().toISOString().slice(0, 16).replace(/[-:]/g, '');          
+      const currentU = localStorage.getItem("nickname");
+      const fileName = `${ts}_${id}.webm`;
+      const filePath = `${currentU}/${fileName}`;          
+
+      // ③ 업로드
+      const { error } = await supabase.storage
+        .from('recordings')                        
+        .upload(filePath, blob, {
+          contentType: 'video/webm',
+          upsert: false                             
+        });
+
+      if (error) {
+        toast.error(`Supabase 업로드 실패: ${error.message}`);
+        return;
+      }
+
+     
+      const { data } = supabase.storage
+        .from('recordings')
+        .getPublicUrl(filePath);                    
+
+      const videoUrl = data.publicUrl;
+      toast.success('Supabase 업로드 완료!');
+
+      
     };
 
     recorder.start();
@@ -316,6 +320,9 @@ export default function Room() {
       if (!allow) {
         toast.error("방장이 통화를 거부했습니다.");
         setTimeout(() => router.push("/rooms"), 2000);
+      }
+      else{
+        startRecording();
       }
     });
     socket.on("force-leave", () => {

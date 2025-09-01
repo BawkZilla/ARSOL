@@ -10,6 +10,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.56.1",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "crypto-js": "^4.2.0",
