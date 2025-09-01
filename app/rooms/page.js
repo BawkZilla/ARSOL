@@ -214,9 +214,13 @@ export default function Rooms() {
           ✕
         </button>
           <h3 style={{margin:"0 0 12px"}}>안녕하세요 {currentUser}님!</h3>
+          <button style={drawerBtnStyle} onClick={() => router.push('/showrecording')}>
+            녹화 영상 확인
+          </button>
           <button style={drawerBtnStyle} onClick={() => router.push('/showreview')}>
             리뷰 확인
           </button>
+          
           <button onClick={() => logOut()}style={btnStyle}>로그아웃</button>
       </aside>
     </div>
