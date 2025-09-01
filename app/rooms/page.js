@@ -14,6 +14,8 @@ export default function Rooms() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState(null);
   const [userJob, setUserJob] = useState(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);   
+  const toggleDrawer = () => setIsDrawerOpen(prev => !prev);
 
   useEffect(() => {
     setCurrentUser(localStorage.getItem("nickname"));
@@ -79,10 +81,37 @@ export default function Rooms() {
       justifyContent: "flex-start",
       background: "#121212",
       color: "#eee",
-      padding: "20px"
+      padding: "20px",
+      position: "relative"
     }}>
       <ToastContainer position="top-center" />
-      <h2 style={{ fontSize: "2rem", marginBottom: "20px" }}>상담 방 게시판 (실시간)</h2>
+      <div
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",   
+          marginBottom: "20px",
+          position: "relative"        
+        }}
+      >
+        <h2 style={{ fontSize: "2rem", margin: 0 }}>상담 방 게시판 (실시간)</h2>
+        <button
+          onClick={toggleDrawer}
+          aria-label="메뉴 열기"
+          style={{
+            position: "absolute",
+            right: 0,                  
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            fontSize: "1.8rem",
+            color: "#eee"
+          }}
+        >
+          ☰
+        </button>
+      </div>
       <div style={{ display: "flex", gap: "10px", marginBottom: "30px" }}>
         {["전체", "대기 중", "상담 중"].map(tag => (
           <button key={tag} onClick={() => setFilter(tag)}
@@ -151,27 +180,45 @@ export default function Rooms() {
             </div>
           ))}
       </div>
-      <div style={{
-          position:"absolute",
-          top:0,
+      <aside
+        style={{
+          position: "fixed",
+          top: 0,
           right: 0,
-          width:"240px",
-          height:"100%",
-          transition:"right .3s",
-          background:"#1e1e1e",
-          color:"#eee",
-          boxShadow:"-2px 0 6px rgba(0,0,0,.6)",
-          zIndex:30,
-          padding:"16px",
-          overflowY:"auto",
+          width: "240px",
+          height: "100%",
+          background: "#1e1e1e",
+          color: "#eee",
+          boxShadow: "-2px 0 6px rgba(0,0,0,.6)",
+          padding: "16px",
+          overflowY: "auto",
 
-        }}>
+          /* 슬라이드 애니메이션 */
+          transform: isDrawerOpen ? "translateX(0)" : "translateX(100%)",
+          transition: "transform .3s ease-in-out",
+          zIndex: 100
+        }}
+      >
+        <button
+          onClick={toggleDrawer}
+          aria-label="닫기"
+          style={{
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            fontSize: "1.5rem",
+            color: "#eee",
+            marginBottom: "12px"
+          }}
+        >
+          ✕
+        </button>
           <h3 style={{margin:"0 0 12px"}}>안녕하세요 {currentUser}님!</h3>
           <button style={drawerBtnStyle} onClick={() => router.push('/showreview')}>
             리뷰 확인
           </button>
           <button onClick={() => logOut()}style={btnStyle}>로그아웃</button>
-      </div>
+      </aside>
     </div>
   );
 }
