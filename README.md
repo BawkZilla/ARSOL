@@ -1,36 +1,30 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## AR 기반 원격 협업 시스템 구현# AR 기반 원격 협업 시스템 구현
 
-## Getting Started
+### [ARSOL 서비스 바로가기](https://ggg-ar-sol.org/)
 
-First, run the development server:
+### 1. 프로젝트 소개
+#### 1.1. 배경 및 필요성
+> 프로젝트를 실행하게 된 배경 및 필요성을 작성하세요.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+#### 1.2. 목표 및 주요 내용
+> 프로젝트의 목표 및 주요 내용을 작성하세요.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. 상세설계
+#### 2.1. 시스템 구성도
+> 시스템 구성도(infra, front, back등의 node 간의 관계)의 사진을 삽입하세요.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+#### 2.1. 사용 기술
+> 스택 별(backend, frontend, designer등) 사용한 기술 및 버전을 작성하세요.
+> 
+> ex) React.Js - React14, Node.js - v20.0.2
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 3. 설치 및 사용 방법
+> 제품을 설치하기 위헤 필요한 소프트웨어 및 설치 방법을 작성하세요.
+>
+> 제품을 설치하고 난 후, 실행 할 수 있는 방법을 작성하세요.
 
-## Learn More
+### 4. 소개 및 시연 영상
+> 프로젝트에 대한 소개와 시연 영상을 넣으세요.
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 5. 팀 소개
+> 팀원 소개 & 구성원 별 역할 분담 & 간단한 연락처를 작성하세요.
