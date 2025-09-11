@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 // import * as THREE from 'three'; // 이 부분을 제거합니다.
 
@@ -11,6 +11,12 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
   const currentLineRef = useRef(null);
   const mindarSystemRef = useRef(null);
   const selectedObjectRef = useRef(null); // To keep track of the currently selected object for move/rotate
+  const [cameraFacingMode, setCameraFacingMode] = useState('user');
+
+  useEffect(() => {
+    const isMobile = /Mobi/i.test(navigator.userAgent);
+    setCameraFacingMode(isMobile ? 'environment' : 'user');
+  }, []);
 
   const parseVec3 = (str) => {
     if (!str) return { x: 0, y: 0, z: 0 };
@@ -300,7 +306,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           break;
       }
       if (newAnnotation) {
-        console.log(currentTool , " 배치 완료(peer)");
+        console.log(currentTool ," 배치 완료(peer)");
         onAnnotationPlaced({ id: annotationId, type: currentTool });
       }
       clearPeerTool();
@@ -448,7 +454,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
         <a-scene
           ref={sceneRef}
-          mindar-image="imageTargetSrc: /targets.mind; autoStart: false;"
+          mindar-image={`imageTargetSrc: /targets.mind; /cpu.mind; /gpu.mind; /mainboard.mind; autoStart: false; cameraFacingMode: ${cameraFacingMode};`}
           color-space="sRGB"
           renderer="colorManagement: true, physicallyCorrectLights"
           vr-mode-ui="enabled: false"
@@ -459,16 +465,16 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
           <a-entity mindar-image-target="targetIndex: 0">
-            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1.095" height="1.095"></a-plane>
           </a-entity>
           <a-entity mindar-image-target="targetIndex: 1">
-            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1.095" height="1.095"></a-plane>
           </a-entity>
           <a-entity mindar-image-target="targetIndex: 2">
-            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1.095" height="1.095"></a-plane>
           </a-entity>
           <a-entity mindar-image-target="targetIndex: 3">
-            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1" height="1"></a-plane>
+            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1.095" height="1.095"></a-plane>
           </a-entity>
         </a-scene>
       </div>
