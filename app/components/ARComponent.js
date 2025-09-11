@@ -73,7 +73,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
 
     const setupStream = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cameraFacingMode}});
         if (videoRef.current) videoRef.current.srcObject = stream;
 
         const checkCanvas = () => {

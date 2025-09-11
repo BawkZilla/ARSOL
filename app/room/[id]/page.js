@@ -623,7 +623,7 @@ export default function Room() {
         position: "absolute", top: "10px", left: "50%", transform: "translateX(-50%)",
         display: "flex", gap: "10px", zIndex: 20
       }}>
-        {joined && (
+        {(joined || userJob == "전문가") && (
           <>
             {!arMode && <button onClick={() => startHostCall("webcam")} style={btnStyle}>웹캠</button>}
             {!arMode && <button onClick={() => startHostCall("screen")} style={btnStyle}>화면 공유</button>}
@@ -641,7 +641,7 @@ export default function Room() {
             <button onClick={()=> leaveRoom() } style={{...btnStyle, background: "#872c2cff"}}>통화 종료</button>
           </>
         )}
-        {!joined && <button onClick={()=> {socket.emit("delete-room", id); router.push("/rooms");} } style={{...btnStyle, background: "#872c2cff"}}>방 닫기</button>}
+        {(!joined && userJob == "사용자") && <button onClick={()=> {socket.emit("delete-room", id); router.push("/rooms");} } style={{...btnStyle, background: "#872c2cff"}}>방 닫기</button>}
       </div>
       {(arMode || isPeerInArMode) && isDrawerOpen && (
         <div style={{
