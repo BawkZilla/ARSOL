@@ -14,7 +14,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
   const [cameraFacingMode, setCameraFacingMode] = useState('user');
 
   useEffect(() => {
-    const isMobile = /Mobi/i.test(navigator.userAgent);
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     setCameraFacingMode(isMobile ? 'environment' : 'user');
   }, []);
 
