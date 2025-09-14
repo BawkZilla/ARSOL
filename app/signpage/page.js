@@ -33,7 +33,7 @@ export default function Auth() {
         setIsLogin(true);
         setPassword(""); setConfirm("");
       })
-      .catch(err => alert("저장 오류: "+err.code));   // ⚠️ 오류 로그
+      .catch(err => alert("저장 오류: "+err.code));   
   };
 
   /* ---------- 로그인 ---------- */
@@ -51,7 +51,7 @@ export default function Auth() {
     router.push("/rooms");
   };
 
-  /* ---------- 스타일 ---------- */
+ 
   const inputStyle = {
     padding: "10px",
     fontSize: "1rem",
@@ -71,7 +71,7 @@ export default function Auth() {
     cursor: "pointer",
   };
 
-  /* ---------- UI ---------- */
+
   return (
     <div style={{
       minHeight: "100vh",
@@ -86,7 +86,7 @@ export default function Auth() {
       <ToastContainer position="top-center" />
       <h1 style={{ fontSize: "2.5rem", fontWeight: "bold" }}>🚀 ARsol</h1>
 
-      {/* 공통 입력: 닉네임 */}
+   
       <input
         placeholder="닉네임 입력"
         value={nickname}
@@ -94,7 +94,7 @@ export default function Auth() {
         style={inputStyle}
       />
 
-      {/* 로그인 전용 입력 */}
+ 
       {isLogin && (
         <input
           type="password"
@@ -105,7 +105,7 @@ export default function Auth() {
         />
       )}
 
-      {/* 회원가입 전용 입력 */}
+
       {!isLogin && (
         <>
           <input
@@ -133,14 +133,14 @@ export default function Auth() {
         </>
       )}
 
-      {/* 주요 액션 버튼 */}
+
       {isLogin ? (
         <button onClick={handleLogin} style={btnStyle}>로그인</button>
       ) : (
         <button onClick={handleSignup} style={btnStyle}>회원가입</button>
       )}
 
-      {/* 보조 전환 버튼 */}
+
       {isLogin ? (
         <button
           onClick={() => { setIsLogin(false); setPassword(""); }}

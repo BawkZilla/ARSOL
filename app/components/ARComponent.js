@@ -2,8 +2,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 
-// import * as THREE from 'three'; // 이 부분을 제거합니다.
-
 const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, peerTool, textValue, clearSelectedTool, clearPeerTool, onAnnotationPlaced, annotationToDelete, clearAllTrigger, socket, roomId }) => {
   const sceneRef = useRef(null);
   const videoRef = useRef(null);
@@ -11,11 +9,13 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
   const currentLineRef = useRef(null);
   const mindarSystemRef = useRef(null);
   const selectedObjectRef = useRef(null); // To keep track of the currently selected object for move/rotate
-  const [cameraFacingMode, setCameraFacingMode] = useState('user');
+  const [cameraFacingMode, setCameraFacingMode] = useState('environment');
 
   useEffect(() => {
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    setCameraFacingMode(isMobile ? 'environment' : 'user');
+    if (typeof navigator !== "undefined") {
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      setCameraFacingMode(isMobile ? 'environment' : 'user');
+    }
   }, []);
 
   const parseVec3 = (str) => {
@@ -29,16 +29,14 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
   };
 
   const highlightObject = (objEl) => {
-    if (objEl && objEl.object3D) {
-        // Store original material/color if needed for unhighlight
-        // For simplicity, just change color for now
-        objEl.setAttribute('material', 'color: #00FFFF; opacity: 0.7'); // Cyan highlight
+    if (objEl && objEl.object3D) {       
+        objEl.setAttribute('material', 'color: #00FFFF; opacity: 0.7'); 
     }
   };
 
   const unhighlightObject = (objEl) => {
     if (objEl && objEl.object3D) {
-        objEl.removeAttribute('material'); // Revert to default or original
+        objEl.removeAttribute('material'); 
     }
   };
 
@@ -139,9 +137,9 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           cone.setAttribute('radius-bottom', coneRadius);
           cone.setAttribute('radius-top', 0);
           cone.setAttribute('color', 'blue');
-          cone.setAttribute('rotation', '180 0 0'); // Invert to point downwards
+          cone.setAttribute('rotation', '180 0 0'); 
           cone.setAttribute('position', `${localPos.x} ${localPos.y + coneHeight / 2} ${localPos.z}`);
-          // Host markers are not tracked for deletion/movement, so no annotationId or newAnnotation
+          
           parent.appendChild(cone);
           break;
         }
@@ -151,24 +149,24 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
 
           const textContainer = document.createElement('a-entity');
           textContainer.setAttribute('position', localPos);
-          textContainer.setAttribute('scale', '1.2 1.2 1.2'); // Overall text size
+          textContainer.setAttribute('scale', '1.2 1.2 1.2'); 
 
-          // Outline text (black, very thin border)
+          
           const outlineTextEl = document.createElement('a-text');
           outlineTextEl.setAttribute('value', userText);
           outlineTextEl.setAttribute('align', 'center');
           outlineTextEl.setAttribute('color', 'black');
-          outlineTextEl.setAttribute('width', '1'); // Base width
-          outlineTextEl.setAttribute('scale', '1.01 1.01 1.01'); // Very thin outline
-          outlineTextEl.setAttribute('position', '0 0 -0.0001'); // Slightly behind
+          outlineTextEl.setAttribute('width', '1'); 
+          outlineTextEl.setAttribute('scale', '1.01 1.01 1.01'); 
+          outlineTextEl.setAttribute('position', '0 0 -0.0001'); 
           textContainer.appendChild(outlineTextEl);
 
-          // Main text (white)
+          
           const mainTextEl = document.createElement('a-text');
           mainTextEl.setAttribute('value', userText);
           mainTextEl.setAttribute('align', 'center');
           mainTextEl.setAttribute('color', 'white');
-          mainTextEl.setAttribute('width', '1'); // Base width
+          mainTextEl.setAttribute('width', '1'); 
           mainTextEl.setAttribute('scale', '1 1 1');
           mainTextEl.setAttribute('position', '0 0 0');
           textContainer.appendChild(mainTextEl);
@@ -248,8 +246,8 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           cone.setAttribute('height', coneHeight);
           cone.setAttribute('radius-bottom', coneRadius);
           cone.setAttribute('radius-top', 0);
-          cone.setAttribute('color', 'red'); // Peer's marker is red
-          cone.setAttribute('rotation', '180 0 0'); // Invert to point downwards
+          cone.setAttribute('color', 'red'); 
+          cone.setAttribute('rotation', '180 0 0'); 
           cone.setAttribute('position', `${localPos.x} ${localPos.y + coneHeight / 2} ${localPos.z}`);
           cone.setAttribute('data-annotation-id', annotationId);
           parent.appendChild(cone);
@@ -263,31 +261,31 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
 
           const textContainer = document.createElement('a-entity');
           textContainer.setAttribute('position', localPos);
-          textContainer.setAttribute('data-annotation-id', annotationId); // Add ID to container
-          textContainer.setAttribute('scale', '1.2 1.2 1.2'); // Overall text size
+          textContainer.setAttribute('data-annotation-id', annotationId); 
+          textContainer.setAttribute('scale', '1.2 1.2 1.2'); 
 
-          // Outline text (black, very thin border)
+          
           const outlineTextEl = document.createElement('a-text');
           outlineTextEl.setAttribute('value', userText);
           outlineTextEl.setAttribute('align', 'center');
           outlineTextEl.setAttribute('color', 'black');
-          outlineTextEl.setAttribute('width', '1'); // Base width
-          outlineTextEl.setAttribute('scale', '1.01 1.01 1.01'); // Very thin outline
-          outlineTextEl.setAttribute('position', '0 0 -0.0001'); // Slightly behind
+          outlineTextEl.setAttribute('width', '1'); 
+          outlineTextEl.setAttribute('scale', '1.01 1.01 1.01'); 
+          outlineTextEl.setAttribute('position', '0 0 -0.0001'); 
           textContainer.appendChild(outlineTextEl);
 
-          // Main text (white)
+          
           const mainTextEl = document.createElement('a-text');
           mainTextEl.setAttribute('value', userText);
           mainTextEl.setAttribute('align', 'center');
           mainTextEl.setAttribute('color', 'white');
-          mainTextEl.setAttribute('width', '1'); // Base width
+          mainTextEl.setAttribute('width', '1'); 
           mainTextEl.setAttribute('scale', '1 1 1');
           mainTextEl.setAttribute('position', '0 0 0');
           textContainer.appendChild(mainTextEl);
 
           parent.appendChild(textContainer);
-          newAnnotation = textContainer; // newAnnotation is the container
+          newAnnotation = textContainer; 
           break;
         }
         case 'cpu':
@@ -326,11 +324,11 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
         const startPoint = parentEntity.object3D.worldToLocal(intersection.point.clone());
 
         const lineEntity = document.createElement('a-entity');
-        const lineId = Date.now(); // Generate unique ID for the line
+        const lineId = Date.now(); 
         lineEntity.setAttribute('data-annotation-id', lineId);
         parentEntity.appendChild(lineEntity);
 
-        lineEntity.setAttribute('scale', '1.5 1.5 1.5'); // Make the line thicker
+        lineEntity.setAttribute('scale', '1.5 1.5 1.5'); 
 
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([startPoint.x, startPoint.y, startPoint.z]), 3));
@@ -344,8 +342,8 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
             line,
             parent: parentEntity,
             points: [startPoint],
-            lineEntity, // Store reference to the entity
-            lineId // Store the ID
+            lineEntity, 
+            lineId 
         };
 
     } else if (state === 'move' && currentLineRef.current && intersection) {
@@ -381,17 +379,17 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
     const handleRequestTransform = ({ objectId }) => {
       const objEl = sceneRef.current.querySelector(`[data-annotation-id='${objectId}']`);
       if (objEl) {
-        // Unhighlight previously selected object
+        
         if (selectedObjectRef.current && selectedObjectRef.current !== objEl) {
           unhighlightObject(selectedObjectRef.current);
         }
         
-        // Highlight new selected object
+       
         highlightObject(objEl);
         selectedObjectRef.current = objEl;
 
         const position = parseVec3(objEl.getAttribute('position'));
-        const rotation = parseVec3(objEl.getAttribute('rotation')); // A-Frame rotation is Euler angles
+        const rotation = parseVec3(objEl.getAttribute('rotation')); 
 
         socket.emit('send-object-transform', {
           roomId: roomId,
@@ -407,7 +405,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
       if (objEl) {
         objEl.setAttribute('position', formatVec3(position));
         objEl.setAttribute('rotation', formatVec3(rotation));
-        // After update, unhighlight if it was the selected object
+        
         if (selectedObjectRef.current === objEl) {
             unhighlightObject(objEl);
             selectedObjectRef.current = null;
@@ -421,7 +419,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
     return () => {
       socket.off('request-object-transform', handleRequestTransform);
       socket.off('update-object-transform', handleUpdateTransform);
-      // Ensure any highlighted object is unhighlighted on unmount
+      
       if (selectedObjectRef.current) {
           unhighlightObject(selectedObjectRef.current);
           selectedObjectRef.current = null;

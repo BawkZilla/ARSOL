@@ -74,10 +74,10 @@ export default function Room() {
 
     const displayStream = await navigator.mediaDevices.getDisplayMedia({
       video: {
-        displaySurface: "window",        // 탭·창·브라우저 계열
-        preferCurrentTab: true,           // 현-탭 우선
-        surfaceSwitching: "exclude",      // 중간 변경 방지
-        selfBrowserSurface: "include"     // 내부 UI 제외 X
+        displaySurface: "window",        
+        preferCurrentTab: true,          
+        surfaceSwitching: "exclude",      
+        selfBrowserSurface: "include"     
       },
       audio: true
     });
@@ -91,19 +91,13 @@ export default function Room() {
     };
 
     recorder.onstop = async () => {
-
-      
-      // ① blob 생성
       const blob = new Blob(recordedChunks.current, { type: 'video/webm' });
-      recordedChunks.current = [];
-
-      // ② 파일 경로 & MIME
+      recordedChunks.current = []; 
       const ts = new Date().toISOString().slice(0, 16).replace(/[-:]/g, '');          
       const currentU = localStorage.getItem("nickname");
       const fileName = `${ts}_${id}.webm`;
       const filePath = `${currentU}/${fileName}`;          
 
-      // ③ 업로드
       const { error } = await supabase.storage
         .from('recordings')                        
         .upload(filePath, blob, {
@@ -286,16 +280,16 @@ export default function Room() {
   };
 
   const onDrawerItemClick = (tool) => {
-    if(arMode) { // Host placing an object
+    if(arMode) { 
       selectedToolRef.current = tool;
-    } else if(isPeerInArMode){ // Specialist placing an object
+    } else if(isPeerInArMode){ 
       if(tool === 'text') {
         const textV = prompt('텍스트를 입력하세요');
         if (textV) {
-          setTextValue(textV); // Update state, which will update the ref via useEffect
+          setTextValue(textV); 
           socket.emit("peer-select", { roomId: id, tool: tool, text: textV });
         } else {
-          return; // Don't proceed if user cancels prompt
+          return; 
         }
       } else {
         socket.emit("peer-select", { roomId: id, tool: tool, text: null });
@@ -759,7 +753,7 @@ export default function Room() {
             }}>적용</button>
             <button style={{...btnStyle, background:"#f44336"}} onClick={() => {
                 setSelectedAnnotationForMove(null);
-                // Optionally, send a signal to unhighlight on host if needed
+                
             }}>취소</button>
           </div>
         </div>
