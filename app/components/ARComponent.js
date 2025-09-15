@@ -452,7 +452,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
         <a-scene
           ref={sceneRef}
-          mindar-image={`imageTargetSrc: /targets.mind; /cpu.mind; /gpu.mind; /mainboard.mind; autoStart: false; cameraFacingMode: ${cameraFacingMode};`}
+          mindar-image={`imageTargetSrc: /mainboard.mind; autoStart: false; cameraFacingMode: ${cameraFacingMode};`}
           color-space="sRGB"
           renderer="colorManagement: true, physicallyCorrectLights"
           vr-mode-ui="enabled: false"
@@ -463,15 +463,6 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
           <a-entity mindar-image-target="targetIndex: 0">
-            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1.095" height="1.095"></a-plane>
-          </a-entity>
-          <a-entity mindar-image-target="targetIndex: 1">
-            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1.095" height="1.095"></a-plane>
-          </a-entity>
-          <a-entity mindar-image-target="targetIndex: 2">
-            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1.095" height="1.095"></a-plane>
-          </a-entity>
-          <a-entity mindar-image-target="targetIndex: 3">
             <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1.095" height="1.095"></a-plane>
           </a-entity>
         </a-scene>

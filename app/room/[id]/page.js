@@ -325,12 +325,16 @@ export default function Room() {
     });
     socket.on("room-closed", () => {
       toast.info("방장이 방을 닫았습니다.");
+      stopLocalStream();
+      if (pc.current) {
+        pc.current.close();
+      }
       stopRecording();
       console.log("방 닫힘", userJob);
       if(userJob !== "전문가") {
         setShowReviewPrompt(true);
       } else {
-        setTimeout(() => router.push("/rooms"), 2000);
+        router.push("/rooms");
       }
     });
     socket.on("signal", async ({ data }) => {

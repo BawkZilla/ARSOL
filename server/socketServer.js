@@ -8,7 +8,9 @@ app.use(cors());
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-    cors: { origin: "*" }
+    cors: { origin: "*" },
+    pingInterval: 30000, 
+    pingTimeout: 60000   
 });
 
 let rooms = {};
