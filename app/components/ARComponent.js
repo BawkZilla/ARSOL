@@ -71,7 +71,13 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
 
     const setupStream = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cameraFacingMode}});
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: cameraFacingMode } } });
+        } catch (e) {
+          console.warn(`[AR] Exact facing mode failed (${e.name}), trying without 'exact'.`);
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cameraFacingMode } });
+        }
         if (videoRef.current) videoRef.current.srcObject = stream;
 
         const checkCanvas = () => {
@@ -137,7 +143,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           cone.setAttribute('radius-bottom', coneRadius);
           cone.setAttribute('radius-top', 0);
           cone.setAttribute('color', 'blue');
-          cone.setAttribute('rotation', '180 0 0'); 
+          cone.setAttribute('rotation', '270 0 0'); 
           cone.setAttribute('position', `${localPos.x} ${localPos.y + coneHeight / 2} ${localPos.z}`);
           
           parent.appendChild(cone);
@@ -179,7 +185,8 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
         case 'gpu': {                      // glTF 불러오기
           const model = document.createElement('a-entity');
           model.setAttribute('gltf-model', `url(/models/${currentTool}.gltf)`);
-          model.setAttribute('scale', '0.2 0.2 0.2');
+          model.setAttribute('scale', '0.08 0.08 0.08');
+          model.setAttribute('rotation', '90 0 0');
           model.setAttribute('position', localPos);
           parent.appendChild(model);
           break;
@@ -247,7 +254,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           cone.setAttribute('radius-bottom', coneRadius);
           cone.setAttribute('radius-top', 0);
           cone.setAttribute('color', 'red'); 
-          cone.setAttribute('rotation', '180 0 0'); 
+          cone.setAttribute('rotation', '270 0 0'); 
           cone.setAttribute('position', `${localPos.x} ${localPos.y + coneHeight / 2} ${localPos.z}`);
           cone.setAttribute('data-annotation-id', annotationId);
           parent.appendChild(cone);
@@ -293,7 +300,8 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
         case 'gpu': {                      // glTF 불러오기
           const model = document.createElement('a-entity');
           model.setAttribute('gltf-model', `url(/models/${currentTool}.gltf)`);
-          model.setAttribute('scale', '0.2 0.2 0.2');
+          model.setAttribute('scale', '0.08 0.08 0.08');
+          model.setAttribute('rotation', '90 0 0');
           model.setAttribute('position', localPos);
           model.setAttribute('data-annotation-id', annotationId);
           parent.appendChild(model);
@@ -452,7 +460,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
         <a-scene
           ref={sceneRef}
-          mindar-image={`imageTargetSrc: /mainboard.mind; autoStart: false; cameraFacingMode: ${cameraFacingMode};`}
+          mindar-image={`imageTargetSrc: /targets.mind; autoStart: false; cameraFacingMode: ${cameraFacingMode};`}
           color-space="sRGB"
           renderer="colorManagement: true, physicallyCorrectLights"
           vr-mode-ui="enabled: false"
@@ -463,7 +471,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
           <a-entity mindar-image-target="targetIndex: 0">
-            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="-90 0 0" width="1.095" height="1.095"></a-plane>
+            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="0 0 0" width="1.095" height="1.095"></a-plane>
           </a-entity>
         </a-scene>
       </div>
