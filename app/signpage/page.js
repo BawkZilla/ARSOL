@@ -2,6 +2,8 @@
 import { useState }           from "react";
 import { useRouter }          from "next/navigation";
 import { getDatabase, ref, get, set } from "firebase/database";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import { app }               from "@/lib/firebase";   
 import bcrypt                 from "bcryptjs";
 
@@ -17,39 +19,39 @@ export default function Auth() {
 
   /* ---------- 회원가입 ---------- */
   const handleSignup = async () => {
-    if (!nickname || !password || !confirm) return alert("모든 항목 필수");
-    if (password !== confirm)               return alert("비밀번호 불일치");
+    if (!nickname || !password || !confirm) return toast.error("모든 항목을 반드시 기입해주세요");
+    if (password !== confirm)               return toast.error("비밀번호가 일치하지 않습니다");
 
     const userRef = ref(db, `users/${nickname}`);
     const snap    = await get(userRef);
-    if (snap.exists())                      return alert("이미 존재하는 닉네임");
+    if (snap.exists())                      return toast.error("이미 존재하는 닉네임입니다");
 
     const hashed = bcrypt.hashSync(password, bcrypt.genSaltSync(10));
     await set(userRef, { password: hashed, job })
       .then(() => {
-        alert("회원가입 완료! 로그인 해 주세요");
+        toast.success("회원가입 완료! 로그인 해 주세요");
         setIsLogin(true);
         setPassword(""); setConfirm("");
       })
-      .catch(err => alert("저장 오류: "+err.code));   // ⚠️ 오류 로그
+      .catch(err => alert("저장 오류: "+err.code));   
   };
 
   /* ---------- 로그인 ---------- */
   const handleLogin = async () => {
-    if (!nickname || !password) return alert("닉네임/비밀번호 입력");
+    if (!nickname || !password) return toast.error("닉네임/비밀번호를 입력해주세요");
 
     const userRef = ref(db, `users/${nickname}`);
     const snap    = await get(userRef);
-    if (!snap.exists())         return alert("존재하지 않는 닉네임");
+    if (!snap.exists())         return toast.error("존재하지 않는 닉네임입니다");
 
     const user = snap.val();
     if (!bcrypt.compareSync(password, user.password))
-      return alert("비밀번호 오류");
+      return toast.error("비밀번호가 일치하지 않습니다");
     localStorage.setItem("nickname", nickname); // 로그인 이후 닉네임 저장 처리
     router.push("/rooms");
   };
 
-  /* ---------- 스타일 ---------- */
+ 
   const inputStyle = {
     padding: "10px",
     fontSize: "1rem",
@@ -69,7 +71,7 @@ export default function Auth() {
     cursor: "pointer",
   };
 
-  /* ---------- UI ---------- */
+
   return (
     <div style={{
       minHeight: "100vh",
@@ -81,9 +83,10 @@ export default function Auth() {
       alignItems: "center",
       gap: "20px"
     }}>
+      <ToastContainer position="top-center" />
       <h1 style={{ fontSize: "2.5rem", fontWeight: "bold" }}>🚀 ARsol</h1>
 
-      {/* 공통 입력: 닉네임 */}
+   
       <input
         placeholder="닉네임 입력"
         value={nickname}
@@ -91,7 +94,7 @@ export default function Auth() {
         style={inputStyle}
       />
 
-      {/* 로그인 전용 입력 */}
+ 
       {isLogin && (
         <input
           type="password"
@@ -102,7 +105,7 @@ export default function Auth() {
         />
       )}
 
-      {/* 회원가입 전용 입력 */}
+
       {!isLogin && (
         <>
           <input
@@ -130,14 +133,14 @@ export default function Auth() {
         </>
       )}
 
-      {/* 주요 액션 버튼 */}
+
       {isLogin ? (
         <button onClick={handleLogin} style={btnStyle}>로그인</button>
       ) : (
         <button onClick={handleSignup} style={btnStyle}>회원가입</button>
       )}
 
-      {/* 보조 전환 버튼 */}
+
       {isLogin ? (
         <button
           onClick={() => { setIsLogin(false); setPassword(""); }}
@@ -152,7 +155,8 @@ export default function Auth() {
         >
           로그인으로 돌아가기
         </button>
-      )}
+      )}     
     </div>
+    
   );
 }

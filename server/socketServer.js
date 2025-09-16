@@ -8,7 +8,9 @@ app.use(cors());
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-    cors: { origin: "*" }
+    cors: { origin: "*" },
+    pingInterval: 30000, 
+    pingTimeout: 60000   
 });
 
 let rooms = {};
@@ -23,7 +25,8 @@ io.on("connection", (socket) => {
             postContent,
             hostId: socket.id,
             hostNickname: nickname,
-            users: [{ id: socket.id, nickname }]
+            users: [{ id: socket.id, nickname }],
+            pendingReview: false
         };
         socket.join(roomId);
         console.log(`Room created: ${roomId} by ${nickname}`);
@@ -35,7 +38,7 @@ io.on("connection", (socket) => {
     socket.on("join-room", ({ roomId, password, nickname }) => {
         console.log(`join-room: ${socket.id} -> ${roomId}, pw=${password}`);
         const room = rooms[roomId];
-        if (!room) return socket.emit("room-not-found");
+        if (!room || room.pendingReview) return socket.emit("room-not-found");
 
         if (socket.id !== room.hostId && room.password !== password) {
             console.log(`Invalid password for ${roomId}`);
@@ -52,7 +55,6 @@ io.on("connection", (socket) => {
 
         socket.join(roomId);
 
-        // emit 조금 늦게 해서 join-room socket.join 완료 후 broadcast
         setTimeout(() => {
             console.log(`Emitting room-users for ${roomId}`, JSON.stringify(room.users));
             io.to(roomId).emit("room-users", {
@@ -93,11 +95,107 @@ io.on("connection", (socket) => {
     });
 
     socket.on("signal", ({ roomId, data }) => {
-        console.log(`Relaying signal in room ${roomId}`);
+        console.log(`📡 signal 수신: ${data?.type || "candidate"}`);
         socket.to(roomId).emit("signal", { from: socket.id, data });
     });
 
-    socket.on("leave-room", (roomId) => handleLeave(socket, roomId));
+    socket.on("ar-mode-change", ({ roomId, arMode }) => {
+        console.log(`AR mode change in room ${roomId} from ${socket.id}. New mode: ${arMode}`);
+        socket.to(roomId).emit("peer-ar-mode-changed", { arMode });
+    });
+
+    socket.on('peer-click', ({ roomId, coords }) => {
+        const room = rooms[roomId];
+        if (room && room.hostId) {
+            io.to(room.hostId).emit('place-object', { coords });
+        }
+    });
+
+    socket.on('peer-select',({ roomId, tool, text }) => {
+        const room = rooms[roomId];
+        if (room && room.hostId) {
+            io.to(room.hostId).emit('tool-select', { tool, text });
+        }
+    });
+
+    socket.on('peer-placed',({roomId}) => {
+        console.log("get success");
+        socket.to(roomId).emit('place-success');
+    });
+
+    socket.on('annotation-added', ({ roomId, annotation }) => {
+        socket.to(roomId).emit('annotation-added', annotation);
+    });
+
+    socket.on('delete-annotation', ({ roomId, annotationId }) => {
+        const room = rooms[roomId];
+        if (room && room.hostId) {
+            io.to(room.hostId).emit('delete-annotation', { annotationId });
+        }
+    });
+
+    socket.on('delete-all-annotations', ({ roomId }) => {
+        const room = rooms[roomId];
+        if (room && room.hostId) {
+            io.to(room.hostId).emit('delete-all-annotations');
+        }
+    });
+
+    socket.on('update-object-transform', ({ roomId, objectId, position, rotation }) => {
+        const room = rooms[roomId];
+        if (room && room.hostId) {
+            io.to(room.hostId).emit('update-object-transform', { objectId, position, rotation });
+        }
+    });
+
+    socket.on('request-object-transform', ({ roomId, objectId }) => {
+        const room = rooms[roomId];
+        if (room && room.hostId) {
+            io.to(room.hostId).emit('request-object-transform', { objectId });
+        }
+    });
+
+    socket.on('send-object-transform', ({ roomId, objectId, position, rotation }) => {
+        const room = rooms[roomId];
+        if (room && room.users) {
+            const specialist = room.users.find(u => u.id !== room.hostId);
+            if (specialist) {
+                io.to(specialist.id).emit('send-object-transform', { objectId, position, rotation });
+            }
+        }
+    });
+
+    const forwardToHost = (eventName) => {
+        socket.on(eventName, ({ roomId, ...rest }) => {
+            const room = rooms[roomId];
+            if (room && room.hostId) {
+                io.to(room.hostId).emit(eventName, rest);
+            }
+        });
+    };
+
+    forwardToHost('draw-start');
+    forwardToHost('draw-move');
+    forwardToHost('draw-end');
+
+    socket.on("leave-room", (roomId) => {
+        handleLeave(socket, roomId);
+        broadcastRooms();
+    });
+
+    socket.on("delete-room", (roomId) => {
+        console.log(`Host disconnected, closing room ${roomId}`);
+        delete rooms[roomId];
+        broadcastRooms();
+    });
+
+    socket.on("review-declined", (roomId) => {
+        const room = rooms[roomId];
+        if (room) {
+            room.pendingReview = false;
+            broadcastRooms();
+        }
+    });
 
     socket.on("disconnect", () => {
         console.log(`Disconnected: ${socket.id}`);
@@ -118,32 +216,33 @@ io.on("connection", (socket) => {
             io.to(roomId).emit("room-closed");
             delete rooms[roomId];
         } else {
+            room.pendingReview = true;
             io.to(roomId).emit("room-users", {
                 users: room.users,
                 host: room.hostId
             });
+            io.to(roomId).emit("peer-disconnected");
             if (room.users.length === 0) delete rooms[roomId];
         }
     }
 
+    function getRoomList() {
+        return Object.keys(rooms)
+            .filter(id => !rooms[id].pendingReview) // Filter rooms
+            .map(id => ({
+                id,
+                roomName: rooms[id].roomName,
+                postContent: rooms[id].postContent,
+                count: rooms[id].users.length
+            }));
+    }
+
     function sendRoomList(socket) {
-        const list = Object.keys(rooms).map(id => ({
-            id,
-            roomName: rooms[id].roomName,
-            postContent: rooms[id].postContent,
-            count: rooms[id].users.length
-        }));
-        socket.emit("rooms-updated", list);
+        socket.emit("rooms-updated", getRoomList());
     }
 
     function broadcastRooms() {
-        const list = Object.keys(rooms).map(id => ({
-            id,
-            roomName: rooms[id].roomName,
-            postContent: rooms[id].postContent,
-            count: rooms[id].users.length
-        }));
-        io.emit("rooms-updated", list);
+        io.emit("rooms-updated", getRoomList());
     }
 });
 
@@ -156,6 +255,6 @@ setInterval(() => {
     }
 }, 1000);
 
-httpServer.listen(4000, () => {
+httpServer.listen(4000,'0.0.0.0', () => {
     console.log("Server running on http://localhost:4000");
 });

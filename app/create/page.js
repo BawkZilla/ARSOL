@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { socket } from "../../lib/socket";
+import { ToastContainer, toast } from "react-toastify";
 
 export default function CreateRoom() {
   const [roomName, setRoomName] = useState("");
@@ -11,7 +12,7 @@ export default function CreateRoom() {
 
   const handleCreate = () => {
     if (!roomName || !password || !postContent) {
-      alert("모든 항목을 입력해주세요.");
+      toast.error("모든 항목을 입력해주세요.");
       return;
     }
     const nickname = localStorage.getItem("nickname") || "익명";
@@ -22,6 +23,7 @@ export default function CreateRoom() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#121212", color: "#eee", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: "20px", padding: "20px" }}>
+      <ToastContainer position="top-center" />
       <h1 style={{ fontSize: "2rem" }}>방 만들기</h1>
       <input type="text" placeholder="방 제목" value={roomName} onChange={(e) => setRoomName(e.target.value)} style={inputStyle} />
       <input type="password" placeholder="비밀번호" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
