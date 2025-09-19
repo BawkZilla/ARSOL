@@ -455,7 +455,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
         <a-scene
           ref={sceneRef}
-          mindar-image={`imageTargetSrc: /targets.mind; autoStart: false; cameraFacingMode: ${(typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) ? 'environment' : 'user'}; uiScanning: yes;`}
+          mindar-image={`imageTargetSrc: https://litter.catbox.moe/kaux4vs0tltqicwh.mind; autoStart: false; cameraFacingMode: ${(typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) ? 'environment' : 'user'}; uiScanning: yes;`}
           color-space="sRGB"
           renderer="colorManagement: true, physicallyCorrectLights"
           vr-mode-ui="enabled: false"
