@@ -473,6 +473,12 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           <a-entity mindar-image-target="targetIndex: 0">
             <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="0 0 0" width="1.095" height="1.095"></a-plane>
           </a-entity>
+          <a-entity mindar-image-target="targetIndex: 1">
+            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="0 0 0" width="1.095" height="1.095"></a-plane>
+          </a-entity>
+          <a-entity mindar-image-target="targetIndex: 2">
+            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="0 0 0" width="1.095" height="1.095"></a-plane>
+          </a-entity>
         </a-scene>
       </div>
     </div>

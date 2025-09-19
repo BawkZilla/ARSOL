@@ -576,10 +576,13 @@ export default function Room() {
       pc.current = null;
     }
     
-    setArMode(newArMode);
     socket.emit("ar-mode-change", { roomId: id, arMode: newArMode });
 
-    if (!newArMode) {
+    if (newArMode) {
+      // Add a short delay before mounting the AR component to ensure the camera is fully released.
+      setTimeout(() => setArMode(true), 100);
+    } else {
+      setArMode(false);
       startHostCall("webcam");
       document.querySelectorAll('.mindar-ui-overlay, .mindar-ui-loading').forEach(el => el.remove());
     }
