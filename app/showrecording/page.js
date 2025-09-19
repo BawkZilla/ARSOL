@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from '@/lib/supabaseClient';
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 export default function ShowRecording() {
     const [videos, setVideos] = useState([]);           
@@ -35,7 +37,7 @@ export default function ShowRecording() {
             });
 
         if (error) {
-            console.error("영상 목록 불러오기 실패:", error.message);
+            toast.error("영상 목록 불러오기 실패:", error.message);
             return;
         }
 
@@ -55,6 +57,25 @@ export default function ShowRecording() {
         fetchVideos();
     }, []);
 
+    async function handleDelete(fileName) {
+        const nickname = localStorage.getItem("nickname");
+        if (!nickname) return;
+
+        const { error } = await supabase.storage
+        .from("recordings")
+        .remove([`${nickname}/${fileName}`]);
+
+        if (error) {
+            alert("삭제 실패: " + error.message);
+            return;
+        }
+        toast.success("영상이 삭제되었습니다");
+
+        setVideos((prev) => prev.filter((v) => v.name !== fileName));
+    }
+
+    
+
     const left = () => {
         router.push('/rooms')
     };
@@ -72,6 +93,7 @@ export default function ShowRecording() {
         color: "#eee",
         padding: "20px"
         }}>
+            <ToastContainer position="top-center" />
             <h1 style={{ fontSize: "2rem" }}>녹화 영상 목록</h1>
             <button onClick={left} style={buttonStyle}>나가기</button>
             <ul
@@ -90,6 +112,12 @@ export default function ShowRecording() {
                     <li key={v.name} style={{ marginBottom: "20px" }}>
                         <video controls width="100%" src={v.url} />
                         <p style={{ textAlign: "center" }}>{formatDate(v.name)}</p>
+                        <button
+                            onClick={() => handleDelete(v.name)}
+                            style={deleteBtnStyle}
+                        >
+                        삭제
+                        </button>
                     </li>
                 ))}
             </ul>
@@ -108,4 +136,13 @@ const buttonStyle = {
   boxShadow: "0 4px 10px rgba(0,0,0,0.4)",
   cursor: "pointer",
   margin: "20px 0"
+};
+
+const deleteBtnStyle = {
+  padding: "6px 12px",
+  background: "#f44336",
+  border: "none",
+  borderRadius: "6px",
+  color: "#fff",
+  cursor: "pointer",
 };
