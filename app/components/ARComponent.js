@@ -9,14 +9,6 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
   const currentLineRef = useRef(null);
   const mindarSystemRef = useRef(null);
   const selectedObjectRef = useRef(null); // To keep track of the currently selected object for move/rotate
-  const [cameraFacingMode, setCameraFacingMode] = useState('environment');
-
-  useEffect(() => {
-    if (typeof navigator !== "undefined") {
-      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      setCameraFacingMode(isMobile ? 'environment' : 'user');
-    }
-  }, []);
 
   const parseVec3 = (str) => {
     if (!str) return { x: 0, y: 0, z: 0 };
@@ -71,12 +63,15 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
 
     const setupStream = async () => {
       try {
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const facingMode = isMobile ? 'environment' : 'user';
+
         let stream;
         try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: cameraFacingMode } } });
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: facingMode } } });
         } catch (e) {
           console.warn(`[AR] Exact facing mode failed (${e.name}), trying without 'exact'.`);
-          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cameraFacingMode } });
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
         }
         if (videoRef.current) videoRef.current.srcObject = stream;
 
@@ -460,7 +455,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
         <a-scene
           ref={sceneRef}
-          mindar-image={`imageTargetSrc: /targets.mind; autoStart: false; cameraFacingMode: ${cameraFacingMode};`}
+          mindar-image={`imageTargetSrc: https://litter.catbox.moe/kaux4vs0tltqicwh.mind; autoStart: false; cameraFacingMode: ${(typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) ? 'environment' : 'user'}; uiScanning: yes;`}
           color-space="sRGB"
           renderer="colorManagement: true, physicallyCorrectLights"
           vr-mode-ui="enabled: false"
@@ -471,6 +466,12 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
           <a-entity mindar-image-target="targetIndex: 0">
+            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="0 0 0" width="1.095" height="1.095"></a-plane>
+          </a-entity>
+          <a-entity mindar-image-target="targetIndex: 1">
+            <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="0 0 0" width="1.095" height="1.095"></a-plane>
+          </a-entity>
+          <a-entity mindar-image-target="targetIndex: 2">
             <a-plane class="target-plane" material="color: lightblue; transparent: true; opacity: 0.1" visible="false" position="0 0 0" rotation="0 0 0" width="1.095" height="1.095"></a-plane>
           </a-entity>
         </a-scene>
