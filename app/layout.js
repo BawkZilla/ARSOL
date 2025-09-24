@@ -22,7 +22,7 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <head>
         <Script src="https://aframe.io/releases/1.5.0/aframe.min.js" strategy="beforeInteractive" />
-        <Script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js" strategy="beforeInteractive" />
+        <Script src="https://cdn.jsdelivr.net/npm/mind-ar/dist/mindar-image-aframe.prod.js" strategy="beforeInteractive" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         {children}
