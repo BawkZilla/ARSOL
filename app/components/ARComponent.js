@@ -61,76 +61,20 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
     const sceneEl = sceneRef.current;
     if (!sceneEl) return;
 
-    const setupStream = async () => {
-      try {
-        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-        const facingMode = isMobile ? 'environment' : 'user';
-
-        let stream;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: facingMode } } });
-        } catch (e) {
-          console.warn(`[AR] Exact facing mode failed (${e.name}), trying without 'exact'.`);
-          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
-        }
-        if (videoRef.current) videoRef.current.srcObject = stream;
-
-        const checkCanvas = () => {
-          const arCanvas = sceneEl.canvas;
-          if (arCanvas && videoRef.current) {
-            const video = videoRef.current;
-            const combinedCanvas = combinedCanvasRef.current;
-            const ctx = combinedCanvas.getContext('2d');
-
-            const drawFrames = () => {
-              if (!videoRef.current) return;
-              ctx.drawImage(video, 0, 0, combinedCanvas.width, combinedCanvas.height);
-              ctx.drawImage(arCanvas, 0, 0, combinedCanvas.width, combinedCanvas.height);
-              requestAnimationFrame(drawFrames);
-            };
-
-            video.addEventListener('loadedmetadata', () => {
-              combinedCanvas.width = video.videoWidth;
-              combinedCanvas.height = video.videoHeight;
-              drawFrames();
-              if (onStreamReady) onStreamReady(combinedCanvas.captureStream());
-            });
-          } else {
-            setTimeout(checkCanvas, 100);
-          }
-        };
-
-        if (sceneEl.hasLoaded) {
-          mindarSystemRef.current = sceneEl.systems['mindar-image-system'];
-          mindarSystemRef.current.start();
-          checkCanvas();
-        } else {
-          sceneEl.addEventListener('loaded', () => {
-            mindarSystemRef.current = sceneEl.systems['mindar-image-system'];
-            mindarSystemRef.current.start();
-            checkCanvas();
-          }, { once: true });
-        }
-      } catch (err) {
-        console.error("Error accessing camera: ", err);
-      }
-    };
-
-    setupStream();
-
+    // All handlers are defined here so they can be added and removed with stable references.
     const handleClick = (event) => {
       const currentTool = selectedTool.current;
-      if (!currentTool){ 
+      if (!currentTool) {
         console.log("tool not selected");
         return;
-      } 
+      }
 
       const touchPoint = event.detail.intersection.point;
       const parent = event.target.parentElement;
       const localPos = parent.object3D.worldToLocal(touchPoint.clone());
-      
+
       switch (currentTool) {
-        case 'marker': {                   // 빨간 구 -> 역삼각뿔
+        case 'marker': { // 빨간 구 -> 역삼각뿔
           const coneHeight = 0.1;
           const coneRadius = 0.02;
           const cone = document.createElement('a-cone');
@@ -138,36 +82,33 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
           cone.setAttribute('radius-bottom', coneRadius);
           cone.setAttribute('radius-top', 0);
           cone.setAttribute('color', 'blue');
-          cone.setAttribute('rotation', '270 0 0'); 
+          cone.setAttribute('rotation', '270 0 0');
           cone.setAttribute('position', `${localPos.x} ${localPos.y + coneHeight / 2} ${localPos.z}`);
-          
           parent.appendChild(cone);
           break;
         }
-        case 'text': {                     // 텍스트 입력 -> plane+text
+        case 'text': { // 텍스트 입력 -> plane+text
           const userText = prompt('텍스트를 입력하세요');
           if (!userText) break;
 
           const textContainer = document.createElement('a-entity');
           textContainer.setAttribute('position', localPos);
-          textContainer.setAttribute('scale', '1.2 1.2 1.2'); 
+          textContainer.setAttribute('scale', '1.2 1.2 1.2');
 
-          
           const outlineTextEl = document.createElement('a-text');
           outlineTextEl.setAttribute('value', userText);
           outlineTextEl.setAttribute('align', 'center');
           outlineTextEl.setAttribute('color', 'black');
-          outlineTextEl.setAttribute('width', '1'); 
-          outlineTextEl.setAttribute('scale', '1.01 1.01 1.01'); 
-          outlineTextEl.setAttribute('position', '0 0 -0.0001'); 
+          outlineTextEl.setAttribute('width', '1');
+          outlineTextEl.setAttribute('scale', '1.01 1.01 1.01');
+          outlineTextEl.setAttribute('position', '0 0 -0.0001');
           textContainer.appendChild(outlineTextEl);
 
-          
           const mainTextEl = document.createElement('a-text');
           mainTextEl.setAttribute('value', userText);
           mainTextEl.setAttribute('align', 'center');
           mainTextEl.setAttribute('color', 'white');
-          mainTextEl.setAttribute('width', '1'); 
+          mainTextEl.setAttribute('width', '1');
           mainTextEl.setAttribute('scale', '1 1 1');
           mainTextEl.setAttribute('position', '0 0 0');
           textContainer.appendChild(mainTextEl);
@@ -177,7 +118,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
         }
         case 'cpu':
         case 'ram':
-        case 'gpu': {                      // glTF 불러오기
+        case 'gpu': { // glTF 불러오기
           const model = document.createElement('a-entity');
           model.setAttribute('gltf-model', `url(/models/${currentTool}.gltf)`);
           model.setAttribute('scale', '0.08 0.08 0.08');
@@ -189,34 +130,109 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
         default:
           break;
       }
-      console.log(currentTool ," 배치 완료(host)");
+      console.log(currentTool, " 배치 완료(host)");
       clearSelectedTool();
     };
 
+    const handleTargetFound = (e) => e.target.querySelector('.target-plane').setAttribute('visible', 'true');
+    const handleTargetLost = (e) => e.target.querySelector('.target-plane').setAttribute('visible', 'false');
+
     const setupEventListeners = () => {
-      sceneEl.querySelectorAll('.target-plane').forEach(plane => {
-        plane.addEventListener('click', handleClick);
-      });
+      sceneEl.querySelectorAll('.target-plane').forEach(plane => plane.addEventListener('click', handleClick));
       sceneEl.querySelectorAll('[mindar-image-target]').forEach(target => {
-        target.addEventListener('targetFound', () => target.querySelector('.target-plane').setAttribute('visible', 'true'));
-        target.addEventListener('targetLost', () => target.querySelector('.target-plane').setAttribute('visible', 'false'));
+        target.addEventListener('targetFound', handleTargetFound);
+        target.addEventListener('targetLost', handleTargetLost);
       });
     };
-    
+
+    let stream; // To hold the stream for cleanup
+
+    const startAR = async () => {
+      try {
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const facingMode = isMobile ? 'environment' : 'user';
+
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: facingMode } } });
+        } catch (e) {
+          console.warn(`[AR] Exact facing mode failed (${e.name}), trying without 'exact'.`);
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
+        }
+        if (videoRef.current) videoRef.current.srcObject = stream;
+
+        const checkCanvas = () => {
+          const arCanvas = sceneEl.canvas;
+          if (arCanvas && videoRef.current && combinedCanvasRef.current) {
+            const video = videoRef.current;
+            const combinedCanvas = combinedCanvasRef.current;
+            const ctx = combinedCanvas.getContext('2d');
+
+            let animationFrameId;
+            const drawFrames = () => {
+              if (!videoRef.current || !combinedCanvasRef.current) {
+                cancelAnimationFrame(animationFrameId);
+                return;
+              }
+              ctx.drawImage(video, 0, 0, combinedCanvas.width, combinedCanvas.height);
+              ctx.drawImage(arCanvas, 0, 0, combinedCanvas.width, combinedCanvas.height);
+              animationFrameId = requestAnimationFrame(drawFrames);
+            };
+
+            const onMetadataLoaded = () => {
+              combinedCanvas.width = video.videoWidth;
+              combinedCanvas.height = video.videoHeight;
+              drawFrames();
+              if (onStreamReady && combinedCanvas.captureStream) {
+                onStreamReady(combinedCanvas.captureStream());
+              }
+            };
+            video.addEventListener('loadedmetadata', onMetadataLoaded);
+          } else {
+            setTimeout(checkCanvas, 100);
+          }
+        };
+
+        mindarSystemRef.current = sceneEl.systems['mindar-image-system'];
+        mindarSystemRef.current.start();
+        checkCanvas();
+        setupEventListeners();
+
+      } catch (err) {
+        console.error("Error accessing camera: ", err);
+      }
+    };
+
+    const loadedHandler = () => {
+      startAR();
+    };
+
     if (sceneEl.hasLoaded) {
-      setupEventListeners();
+      startAR();
     } else {
-      sceneEl.addEventListener('loaded', setupEventListeners);
+      sceneEl.addEventListener('loaded', loadedHandler, { once: true });
     }
 
     return () => {
+      // Comprehensive cleanup function
+      sceneEl.removeEventListener('loaded', loadedHandler);
+
+      sceneEl.querySelectorAll('.target-plane').forEach(plane => plane.removeEventListener('click', handleClick));
+      sceneEl.querySelectorAll('[mindar-image-target]').forEach(target => {
+        target.removeEventListener('targetFound', handleTargetFound);
+        target.removeEventListener('targetLost', handleTargetLost);
+      });
+
       if (mindarSystemRef.current) {
         mindarSystemRef.current.stop();
+        mindarSystemRef.current = null;
       }
-      if (videoRef.current && videoRef.current.srcObject) {
-        videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
       }
-      document.querySelectorAll('.mindar-ui-overlay, .mindar-ui-loading').forEach(el => el.remove());
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      document.querySelectorAll('.mindar-ui-overlay, .mindar-ui-loading, .mindar-ui-scanning').forEach(el => el.remove());
     };
   }, [onStreamReady]);
 
