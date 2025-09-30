@@ -234,7 +234,7 @@ const ARComponent = ({ onStreamReady, drawData, peerClickCoords, selectedTool, p
       }
       document.querySelectorAll('.mindar-ui-overlay, .mindar-ui-loading, .mindar-ui-scanning').forEach(el => el.remove());
     };
-  }, [onStreamReady]);
+  }, []);
 
   // Peer의 클릭을 처리 (구 생성)
   useEffect(() => {
